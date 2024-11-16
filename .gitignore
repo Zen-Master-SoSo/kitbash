@@ -1,0 +1,7 @@
+*.pyc
+*.log
+__pycache__
+temp
+temp.*
+debug.*
+TODO

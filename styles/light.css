@@ -1,0 +1,82 @@
+QWidget, QPushButton, QMenu {
+	color: #404040;
+}
+
+QWidget:disabled, QPushButton:disabled {
+	color: #9C9C9C;
+}
+
+QLabel {
+	background: transparent;
+}
+
+QComboBox,
+QLineEdit {
+	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E6E6E6, stop:.5 #F5F5F5, stop:1 #FCFCFC);
+	border: 1px solid #BFBFBF;
+	padding: 2px 4px;
+}
+
+QComboBox:on,
+QComboBox:on::drop-down {
+	background: #EEE;
+}
+
+QPushButton {
+	background: #E8E8E8;
+}
+
+
+QScrollBar:horizontal::groove{
+	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #BFC1C9, stop:.5 #CED0D9, stop:1 #D3D5DE);
+}
+
+QScrollBar:handle,
+QScrollBar:add-line,
+QScrollBar:sub-line {
+	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #F8F9FA, stop:.5 #F0F1F2, stop:1 #E9EAEB);
+	border: 1px solid #BFC6D6;
+}
+
+
+QMenu {
+	background: #F0F0F0;
+}
+
+QMenu::item {
+	background: #F2F2F2;
+}
+
+QMenu::item:selected {
+	background: #D3E5F2;
+}
+
+
+DrumWidget QLabel {
+	color: #666;
+	font-size: 10pt;
+	margin-left: 8px;
+}
+
+DrumWidget QPushButton:disabled {
+	color: #888;
+}
+
+DrumWidget QPushButton:checked {
+	background-color: #E6E6FA;
+}
+
+DrumWidget GroupFrame {
+	border: 1px solid #C8C8C8;
+}
+
+DrumWidget GroupButton {
+	font-weight: bold;
+	font-size: 10pt;
+}
+
+DrumWidget InstrumentButton {
+	font-size: 8.5pt;
+}
+
+
