@@ -1,9 +1,10 @@
-#  kitbash/utils/midi_loops.py
+#  kitbash/utils/loops.py
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
 import os, sys, io, logging, sqlite3, glob, re
 import numpy as np
+from math import ceil
 from appdirs import user_config_dir
 from random import sample
 from mido import parse_all, MidiFile
@@ -16,6 +17,12 @@ EVENT_STRUCT	= np.dtype([
 	('velocity', np.uint8)
 ])
 
+SCALED_EVENT_STRUCT	= np.dtype([
+	('sampidx', np.uint),
+	('pitch', np.uint8),
+	('velocity', np.uint8)
+])
+
 DEFAULT_BEATS_PER_MEASURE = 4
 DEFAULT_USECS_PER_BEAT = 500000
 USECS_PER_SECOND = 1000000
@@ -24,24 +31,39 @@ class Loop:
 
 	def __init__(self, loop_id):
 		cursor = Loops.conn().cursor()
-		cursor.execute('SELECT * FROM midi_loops WHERE loop_id = ?', (loop_id,))
+		cursor.execute('SELECT * FROM loops WHERE loop_id = ?', (loop_id,))
 		self.loop_id, self.loop_group, self.name, self.beats_per_measure, self.measures, midi_events = cursor.fetchone()
 		evfile = io.BytesIO(midi_events)
 		self.events = np.load(evfile)
+		self.scaled_events = None
 
 	@property
-	def event_length(self):
+	def event_count(self):
 		return len(self.events)
 
-	def events_scaled(self, bpm, samplerate):
-		bps = bpm / 3
+	@property
+	def beats_length(self):
+		return ceil(self.events[-1]['beat'])
+
+	def scale(self, bpm=120, samplerate=48000, beat_offset=0):
+		bps = bpm / 60
 		beat_scale = bps * samplerate
 		scaled = self.events.copy()
+		scaled['beat'] += beat_offset
 		scaled['beat'] *= beat_scale
-		return scaled
+		self.scaled_events = scaled.astype(SCALED_EVENT_STRUCT)
+
+	def reset_iteration(self):
+		self.iter_index = 0
+
+	def next_scaled_event(self):
+		yield self.scaled_events[self.iter_index]
+		self.iter_index += 1
+		if self.iter_index == len(self.scaled_events):
+			self.iter_index = 0
 
 	def __str__(self):
-		return '<Loop #{0.loop_id}: "{0.name}"; {0.beats_per_measure} beats per measure; {0.measures} measures; {0.event_length} events>'.format(self)
+		return '<Loop #{0.loop_id}: "{0.name}"; {0.beats_per_measure} beats per measure; {0.measures} measures; {0.event_count} events>'.format(self)
 
 	def print_events(self):
 		for evt in self.events.tolist():
@@ -64,10 +86,13 @@ class Loops:
 
 	@classmethod
 	def init_schema(cls):
+		cls.conn().execute("DROP INDEX IF EXISTS bpm_index")
+		cls.conn().execute("DROP INDEX IF EXISTS measures_index")
+		cls.conn().execute("DROP INDEX IF EXISTS pitch_index")
 		cls.conn().execute("DROP TABLE IF EXISTS pitches")
-		cls.conn().execute("DROP TABLE IF EXISTS midi_loops")
+		cls.conn().execute("DROP TABLE IF EXISTS loops")
 		cls.conn().execute("""
-			CREATE TABLE midi_loops (
+			CREATE TABLE loops (
 				loop_id INTEGER PRIMARY KEY,
 				loop_group TEXT,
 				name TEXT,
@@ -79,22 +104,22 @@ class Loops:
 			CREATE TABLE pitches (
 				loop_id INTEGER,
 				pitch INTEGER,
-				FOREIGN KEY(loop_id) REFERENCES midi_loops(loop_id) ON DELETE CASCADE
+				FOREIGN KEY(loop_id) REFERENCES loops(loop_id) ON DELETE CASCADE
 			)""")
-		cls.conn().execute("CREATE INDEX bpm_index ON midi_loops (beats_per_measure)")
-		cls.conn().execute("CREATE INDEX measures_index ON midi_loops (measures)")
+		cls.conn().execute("CREATE INDEX bpm_index ON loops (beats_per_measure)")
+		cls.conn().execute("CREATE INDEX measures_index ON loops (measures)")
 		cls.conn().execute("CREATE INDEX pitch_index ON pitches (pitch)")
 
 	@classmethod
 	def delete_all(cls):
-		cls.conn().execute("DELETE FROM midi_loops")
+		cls.conn().execute("DELETE FROM loops")
 		cls.conn().commit()
 
 	@classmethod
 	def import_dirs(cls, base_dir):
 		cursor = cls.conn().cursor()
 		loop_sql = """
-			INSERT INTO midi_loops(loop_group, name, beats_per_measure, measures, midi_events)
+			INSERT INTO loops(loop_group, name, beats_per_measure, measures, midi_events)
 			VALUES (?,?,?,?,?)
 			RETURNING loop_id
 			"""
@@ -163,4 +188,4 @@ class Loops:
 		return int(beats_per_measure), measure + 1, events
 
 
-#  end kitbash/utils/midi_loops.py
+#  end kitbash/utils/loops.py

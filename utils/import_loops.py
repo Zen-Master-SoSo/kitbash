@@ -3,7 +3,7 @@
 #  Copyright 2024 liyang <liyang@veronica>
 #
 import sys, logging, argparse
-from kitbash.midi_loops import Loops
+from kitbash.loops import Loops
 
 def main():
 	parser = argparse.ArgumentParser()
