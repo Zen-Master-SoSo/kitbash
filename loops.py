@@ -11,16 +11,20 @@ from mido import parse_all, MidiFile
 from mido.midifiles.midifiles import read_file_header
 
 
-EVENT_STRUCT	= np.dtype([
-	('beat', float),
+EVENT_STRUCT = np.dtype([
+	('status', np.uint8),
 	('pitch', np.uint8),
 	('velocity', np.uint8)
 ])
 
-SCALED_EVENT_STRUCT	= np.dtype([
-	('sampidx', np.uint),
-	('pitch', np.uint8),
-	('velocity', np.uint8)
+BEAT_EVENT_STRUCT = np.dtype([
+	('beat', float),
+	('event', EVENT_STRUCT)
+])
+
+SAMPLE_EVENT_STRUCT	= np.dtype([
+	('sample', np.uint),
+	('event', EVENT_STRUCT)
 ])
 
 DEFAULT_BEATS_PER_MEASURE = 4
@@ -36,6 +40,7 @@ class Loop:
 		evfile = io.BytesIO(midi_events)
 		self.events = np.load(evfile)
 		self.scaled_events = None
+		self._beat_offset = 0
 
 	@property
 	def event_count(self):
@@ -45,19 +50,29 @@ class Loop:
 	def beats_length(self):
 		return ceil(self.events[-1]['beat'])
 
-	def scale(self, bpm=120, samplerate=48000, beat_offset=0):
+	@property
+	def beat_offset(self):
+		return self._beat_offset
+
+	@beat_offset.setter
+	def beat_offset(self, val):
+		self._beat_offset = val
+
+	def scale(self, bpm, samplerate):
 		bps = bpm / 60
 		beat_scale = bps * samplerate
 		scaled = self.events.copy()
-		scaled['beat'] += beat_offset
+		scaled['beat'] += self._beat_offset
 		scaled['beat'] *= beat_scale
-		self.scaled_events = scaled.astype(SCALED_EVENT_STRUCT)
+		self.scaled_events = scaled.astype(SAMPLE_EVENT_STRUCT)
 
 	def reset_iteration(self):
 		self.iter_index = 0
 
-	def next_scaled_event(self):
-		yield self.scaled_events[self.iter_index]
+	def current_scaled_event(self):
+		return self.scaled_events[self.iter_index]
+
+	def increment(self):
 		self.iter_index += 1
 		if self.iter_index == len(self.scaled_events):
 			self.iter_index = 0
@@ -182,7 +197,7 @@ class Loops:
 			elif msg.type == 'note_on':
 				measure = int(time / seconds_per_measure)
 				beat = time / seconds_per_beat
-				events[ordinal] = ( beat, msg.note, msg.velocity )
+				events[ordinal] = ( beat, msg.status, msg.note, msg.velocity )
 				ordinal += 1
 			time += msg.time
 		return int(beats_per_measure), measure + 1, events

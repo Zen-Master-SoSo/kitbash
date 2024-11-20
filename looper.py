@@ -3,10 +3,11 @@
 #  Copyright 2024 liyang <liyang@veronica>
 #
 import numpy as np
+from math import ceil
 from jack import Client, Port, Status, JackError, CallbackExit, STOPPED, ROLLING, STARTING, NETSTARTING
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtCore import pyqtSlot
-from kitbash.loops import Loop
+from kitbash.loops import Loop, SAMPLE_EVENT_STRUCT
 
 
 class Looper:
@@ -38,13 +39,16 @@ class Looper:
 			self.beats_per_measure = loop.beats_per_measure
 		elif loop.beats_per_measure != self.beats_per_measure:
 			raise Exception("beats_per_measure mismatch")
+		loop.scale(self.bpm, self.client.samplerate)
 		self.loops.append(loop)
-		self.scale_loops()
-		self.beats_length = max([loop.beats_length for loop in self.loops])
 
-	def scale_loops(self):
+	def rescale(self):
 		for loop in self.loops:
 			loop.scale(self.bpm, self.client.samplerate)
+		self.beats_length = max([loop.beats_length for loop in self.loops])
+		self.measure_length = ceil(self.beats_length / self.beats_per_measure)
+		self.samples_per_block = self.client.samplerate * self.client.blocksize
+		self.__last_sample = self.samples_per_block * self.measure_length
 
 	def stop(self):
 		logging.debug('STOP')
@@ -55,7 +59,6 @@ class Looper:
 		logging.debug('PLAY')
 		for loop in self.loops:
 			loop.reset_iteration()
-		self.__frame = 0
 		self.__real_process_callback = self.play_process_callback
 		self.state = self.PLAYING
 
@@ -64,20 +67,26 @@ class Looper:
 
 	def play_process_callback(self, frames):
 		self.out_port.clear_buffer()
+		if self.start_sample >= self.__last_sample:
+			self.start_sample = 0
+		end_sample = self.start_sample + self.samples_per_block
+		events_this_block = np.ndarray(dtype = SAMPLE_EVENT_STRUCT)
 		for loop in self.loops:
-			while self.__frame == self.buffers[loop][self.buf_idx[loop]]['frame']:
-				self.out_port.write_midi_event(self.buffers[loop][self.buf_idx[loop]]['offset'], self.buffers[loop][self.buf_idx[loop]]['data'])
-				self.buf_idx[loop] += 1
-		self.__frame += 1
+			events_this_block +- loop.scaled_events_between(self.start_sample, end_sample)
+		if len(events_this_block):
+			np.sort(events_this_block, kind="heapsort", order="start_sample")
+			for evt in events_this_block:
+				self.out_port.write_midi_event(evt['offset'], evt['data'])
+		self.start_sample = end_sample
 
 	# -----------------------
 	# JACK callbacks
 
 	def blocksize_callback(self, blocksize):
-		self.scale_loops()
+		self.rescale()
 
 	def samplerate_callback(self, samplerate):
-		self.scale_loops()
+		self.rescale()
 
 	def process_callback(self, frames):
 		try:
