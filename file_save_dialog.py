@@ -1,6 +1,7 @@
 import sys
 from functools import partial
 from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QFileDialog
 from PyQt5.QtWidgets import QLabel
@@ -26,6 +27,7 @@ class FileSaveDialog(QFileDialog):
 	samples_mode = HARDLINK
 
 	def __init__(self, parent):
+		QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs)
 		super().__init__(parent)
 		self.setWindowTitle("Save as .sfz")
 		self.setFileMode(QFileDialog.AnyFile)
