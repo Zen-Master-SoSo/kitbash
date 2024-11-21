@@ -14,7 +14,7 @@ def main():
 		help='Path to search for midi files to import.')
 	parser.add_argument("--delete", "-d", action="store_true",
 		help="Erase all rows in the database first.")
-	parser.add_argument("--rebuild", "-r", action="store_true",
+	parser.add_argument("--nuke", "-n", action="store_true",
 		help="Nuke the entire database and reinitialize the database schema.")
 	parser.add_argument("--verbose", "-v", action="store_true",
 		help="Show more detailed debug information.")
@@ -28,7 +28,7 @@ def main():
 		format=log_format
 	)
 
-	if options.rebuild:
+	if options.nuke:
 		Loops.init_schema()
 	elif options.delete:
 		Loops.delete_all()

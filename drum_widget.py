@@ -9,7 +9,6 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QHBoxLayout
 from PyQt5.QtWidgets import QLabel
@@ -17,8 +16,6 @@ from PyQt5.QtWidgets import QFrame
 from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QPushButton
 
-
-from kitbash.drumkit import Drumkit
 
 class DrumWidget(QFrame):
 
@@ -72,7 +69,6 @@ class DrumWidget(QFrame):
 	@pyqtSlot(str, QPushButton)
 	def group_select(self, group_id, button):
 		state = button.isChecked()
-		frame = button.parentWidget()
 		for button in button.parentWidget().findChildren(InstrumentButton):
 			button.setChecked(state)
 			button.setEnabled(not state)

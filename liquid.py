@@ -2,13 +2,9 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
-
-import logging
-from simple_carla.qt import CarlaQt, QtWidgetPlugin, QtPlugin
-
-# PyQt5 imports
-from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
-
+from PyQt5.QtCore import pyqtSignal
+from simple_carla.qt import CarlaQt, QtPlugin
+from kitbash.sfz import SFZ
 
 class LiquidSFZ(QtPlugin):
 
@@ -36,7 +32,7 @@ class LiquidSFZ(QtPlugin):
 		self.load_sfz()
 
 	def load_sfz(self):
-		CarlaQt.instance.autoload(self, self.sfz.path, self.auto_load_complete)
+		CarlaQt.instance.autoload(self, self.sfz.filename, self.auto_load_complete)
 
 	def auto_load_complete(self):
 		self.sig_SFZLoaded.emit(self.sfz)

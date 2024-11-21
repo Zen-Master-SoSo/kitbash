@@ -7,7 +7,9 @@ from math import ceil
 from jack import Client, Port, Status, JackError, CallbackExit, STOPPED, ROLLING, STARTING, NETSTARTING
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtCore import pyqtSlot
-from kitbash.loops import Loop, SAMPLE_EVENT_STRUCT
+from kitbash.loops import Loop, EVENTS_STRUCT
+
+DEFAULT_BEATS_PER_MINUTE = 120
 
 
 class Looper:
@@ -16,11 +18,11 @@ class Looper:
 	INACTIVE	= 0
 	PLAYING		= 1
 
-	def __init__(self, bpm=120, client_name='looper'):
-		self.bpm = bpm
-		self.loops = []
+	def __init__(self, client_name='looper', test=False):
+		self._bpm = DEFAULT_BEATS_PER_MINUTE
 		self.beats_per_measure = None
-		self.beats_length = None
+		self.beat = 0.0
+		self.loops = []
 		self.__real_process_callback = self.null_process_callback
 		self.client_name = client_name
 		self.client = Client(self.client_name, no_start_server=True)
@@ -31,7 +33,20 @@ class Looper:
 		self.client.set_xrun_callback(self.xrun_callback)
 		self.client.activate()
 		self.client.get_ports()
-		self.out_port = self.client.midi_outports.register('out')
+		self.out_port = FakePort() if test else self.client.midi_outports.register('out')
+
+	@property
+	def bpm(self):
+		"""
+		Play position offset, i.e.
+			If offset is 4, all notes are played 4 beats late
+		"""
+		return self._bpm
+
+	@bpm.setter
+	def bpm(self, val):
+		self._bpm = val
+		self.rescale()
 
 	def add_loop(self, loop, starting_beat=0):
 		assert(isinstance(loop, Loop))
@@ -39,16 +54,16 @@ class Looper:
 			self.beats_per_measure = loop.beats_per_measure
 		elif loop.beats_per_measure != self.beats_per_measure:
 			raise Exception("beats_per_measure mismatch")
-		loop.scale(self.bpm, self.client.samplerate)
 		self.loops.append(loop)
+		self.end_beat = float(max([loop.beats_length for loop in self.loops]))
 
 	def rescale(self):
-		for loop in self.loops:
-			loop.scale(self.bpm, self.client.samplerate)
-		self.beats_length = max([loop.beats_length for loop in self.loops])
-		self.measure_length = ceil(self.beats_length / self.beats_per_measure)
-		self.samples_per_block = self.client.samplerate * self.client.blocksize
-		self.__last_sample = self.samples_per_block * self.measure_length
+		beats_per_second = self._bpm / 60
+		self.samples_per_beat = self.client.samplerate / beats_per_second
+		seconds_per_process = self.client.blocksize / self.client.samplerate
+		print('seconds_per_process', seconds_per_process)
+		self.beats_per_process = beats_per_second * seconds_per_process
+		print('beats_per_process', self.beats_per_process)
 
 	def stop(self):
 		logging.debug('STOP')
@@ -57,27 +72,39 @@ class Looper:
 
 	def play(self):
 		logging.debug('PLAY')
-		for loop in self.loops:
-			loop.reset_iteration()
 		self.__real_process_callback = self.play_process_callback
 		self.state = self.PLAYING
+
+	def rewind(self):
+		logging.debug('REWIND')
+		for loop in self.loops:
+			loop.reset_iteration()
+		self.beat = 0.0
 
 	def null_process_callback(self, frames):
 		pass
 
 	def play_process_callback(self, frames):
 		self.out_port.clear_buffer()
-		if self.start_sample >= self.__last_sample:
-			self.start_sample = 0
-		end_sample = self.start_sample + self.samples_per_block
-		events_this_block = np.ndarray(dtype = SAMPLE_EVENT_STRUCT)
-		for loop in self.loops:
-			events_this_block +- loop.scaled_events_between(self.start_sample, end_sample)
-		if len(events_this_block):
-			np.sort(events_this_block, kind="heapsort", order="start_sample")
-			for evt in events_this_block:
-				self.out_port.write_midi_event(evt['offset'], evt['data'])
-		self.start_sample = end_sample
+		end_beat = self.beat + self.beats_per_process
+		while True:
+			events_this_block = np.ndarray(0, dtype = EVENTS_STRUCT)
+			for loop in self.loops:
+				loop_evts = loop.events_between(self.beat, end_beat)
+				events_this_block = np.hstack([ events_this_block, loop_evts ])
+			if len(events_this_block):
+				np.sort(events_this_block, kind="heapsort", order="beat")
+				for evt in events_this_block:
+					offset = int((evt['beat'] - self.beat) * self.samples_per_beat)
+					if offset < 0:
+						logging.debug('negative offset')
+					else:
+						self.out_port.write_midi_event(offset, (evt['status'], evt['pitch'], evt['velocity']))
+			if end_beat < self.end_beat:
+				self.beat = end_beat
+				return
+			self.beat = 0.0
+			end_beat -= self.end_beat
 
 	# -----------------------
 	# JACK callbacks
@@ -108,7 +135,7 @@ class Looper:
 		The callback argument is the delay in microseconds due to the most recent XRUN
 		occurrence. The callback is supposed to raise CallbackExit on error.
 		"""
-		#logging.debug('xrun: delayed %.2f microseconds' % delayed_usecs)
+		logging.debug('xrun: delayed %.2f microseconds' % delayed_usecs)
 		pass
 
 
@@ -116,6 +143,17 @@ class JackShutdownError(Exception):
 
 	pass
 
+
+class FakePort:
+
+	rc = 0
+
+	def clear_buffer(self):
+		pass
+
+	def write_midi_event(self, offset, tup):
+		print('MIDI EVENT: {:7d}  0x{:x}  {:d}  {:d}'.format(offset, tup[0], tup[1], tup[2]))
+		self.rc += 1
 
 
 class LooperTestWindow(QMainWindow):
