@@ -6,6 +6,7 @@ import os, io, logging, sqlite3, glob, re
 import numpy as np
 from math import ceil
 from appdirs import user_config_dir
+from random import choice
 from mido import MidiFile
 
 
@@ -31,6 +32,12 @@ class Loop:
 		self.events = np.load(evfile)
 		self._beat_offset = 0
 
+	@classmethod
+	def random(cls):
+		cursor = Loops.conn().cursor()
+		cursor.execute('SELECT loop_id FROM loops')
+		return Loop(choice(cursor.fetchall()[0]))
+
 	@property
 	def event_count(self):
 		"""
@@ -39,13 +46,13 @@ class Loop:
 		return len(self.events)
 
 	@property
-	def beats_length(self):
+	def last_beat(self):
 		"""
 		Returns the number of beats in which all events are included, i.e.:
 			If last event is beat 0.5, returns 1
 			if last event is beat 3.75, returns 4
 		"""
-		return ceil(self.events[-1]['beat'])
+		return self.events[-1]['beat']
 
 	@property
 	def beat_offset(self):

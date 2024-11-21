@@ -5,8 +5,8 @@
 import numpy as np
 from math import ceil
 from jack import Client, Port, Status, JackError, CallbackExit, STOPPED, ROLLING, STARTING, NETSTARTING
-from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtWidgets import QMainWindow
 from kitbash.loops import Loop, EVENTS_STRUCT
 
 DEFAULT_BEATS_PER_MINUTE = 120
@@ -55,7 +55,8 @@ class Looper:
 		elif loop.beats_per_measure != self.beats_per_measure:
 			raise Exception("beats_per_measure mismatch")
 		self.loops.append(loop)
-		self.end_beat = float(max([loop.beats_length for loop in self.loops]))
+		last_beat = max([loop.last_beat for loop in self.loops])
+		self.end_beat = float(ceil(last_beat / self.beats_per_measure) * self.beats_per_measure)
 
 	def rescale(self):
 		beats_per_second = self._bpm / 60
@@ -103,8 +104,8 @@ class Looper:
 			if end_beat < self.end_beat:
 				self.beat = end_beat
 				return
-			self.beat = 0.0
 			end_beat -= self.end_beat
+			self.beat = 0.0
 
 	# -----------------------
 	# JACK callbacks
@@ -161,22 +162,33 @@ class LooperTestWindow(QMainWindow):
 	def __init__(self, options):
 		super().__init__()
 		self._options = options
+		frm = QFrame()
+		lo = QVBoxLayout()
 		self.loop_button = QPushButton(self)
 		self.loop_button.setText('PLAY')
 		self.loop_button.setCheckable(True)
 		self.loop_button.toggled.connect(self.play_toggle)
-		self.setCentralWidget(self.loop_button)
+		lo.addWidget(self.loop_button)
+		self.label = QLabel('beat')
+		lo.addWidget(self.label)
+		frm.setLayout(lo)
+		self.setCentralWidget(frm)
 		self.quit_shortcut = QShortcut(QKeySequence('Ctrl+Q'), self)
 		self.quit_shortcut.activated.connect(self.close)
 		self.looper = Looper()
+		self.update_timer = QTimer()
+		self.update_timer.setInterval(int(1 / 8 * 1000))
+		self.update_timer.timeout.connect(self.slot_timer_timeout)
 		QTimer.singleShot(0, self.layout_complete)
 
-	# -----------------------------------------------------------------
-	# Setup functions:
+	@pyqtSlot()
+	def slot_timer_timeout(self):
+		self.label.setText("%.02f" % self.looper.beat)
 
 	@pyqtSlot()
 	def layout_complete(self):
-		self.looper.add_loop(Loop(1))
+		self.looper.add_loop(Loop(33))
+		self.update_timer.start()
 
 	@pyqtSlot(bool)
 	def play_toggle(self, state):
@@ -208,7 +220,6 @@ if __name__ == "__main__":
 	from PyQt5.QtGui import QKeySequence
 	from PyQt5.QtWidgets import QLabel
 	from PyQt5.QtWidgets import QPushButton
-	from PyQt5.QtWidgets import QMainWindow
 	from PyQt5.QtWidgets import QWidget
 	from PyQt5.QtWidgets import QFrame
 	from PyQt5.QtWidgets import QVBoxLayout

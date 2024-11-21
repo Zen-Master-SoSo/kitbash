@@ -64,9 +64,9 @@ class MainWindow(QMainWindow):
 		signal(SIGTERM, self.system_signal)
 		CarlaQt(APPLICATION_NAME)
 		self.connect_host_callbacks()
-		self.slow_timer = QTimer()
-		self.slow_timer.setInterval(int(1 / 4 * 1000))
-		self.slow_timer.timeout.connect(self.slot_timer_timeout)
+		self.update_timer = QTimer()
+		self.update_timer.setInterval(int(1 / 4 * 1000))
+		self.update_timer.timeout.connect(self.slot_timer_timeout)
 		QTimer.singleShot(0, self.layout_complete)
 
 	# -----------------------------------------------------------------
@@ -394,12 +394,12 @@ class MainWindow(QMainWindow):
 		self.refresh_buffer_size(buffer_size)
 		self.refresh_sample_rate(int(sample_rate))
 		self.refresh_xruns(0.0, 0)
-		self.slow_timer.start()
+		self.update_timer.start()
 
 	@pyqtSlot()
 	def slot_EngineStopped(self):
 		logging.debug("======= Engine stopped ========")
-		self.slow_timer.stop()
+		self.update_timer.stop()
 		self.refresh_xruns(0.0, 0)
 
 	@pyqtSlot(int)
