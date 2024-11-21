@@ -2,12 +2,13 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
+import logging
 import numpy as np
 from math import ceil
-from jack import Client, Port, Status, JackError, CallbackExit, STOPPED, ROLLING, STARTING, NETSTARTING
+from jack import Client, Port, Status, JackOpenError, JackError, CallbackExit, STOPPED, ROLLING, STARTING, NETSTARTING
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QMainWindow
-from kitbash.loops import Loop, EVENTS_STRUCT
+from kitbash.loops import Loop, EVENT_STRUCT
 
 DEFAULT_BEATS_PER_MINUTE = 120
 
@@ -25,15 +26,20 @@ class Looper:
 		self.loops = []
 		self.__real_process_callback = self.null_process_callback
 		self.client_name = client_name
-		self.client = Client(self.client_name, no_start_server=True)
-		self.client.set_blocksize_callback(self.blocksize_callback)
-		self.client.set_samplerate_callback(self.samplerate_callback)
-		self.client.set_process_callback(self.process_callback)
-		self.client.set_shutdown_callback(self.shutdown_callback)
-		self.client.set_xrun_callback(self.xrun_callback)
-		self.client.activate()
-		self.client.get_ports()
-		self.out_port = FakePort() if test else self.client.midi_outports.register('out')
+		if test:
+			self.client = FakeClient()
+			self.out_port = FakePort()
+			self.rescale()
+		else:
+			self.client = Client(self.client_name, no_start_server=True)
+			self.client.set_blocksize_callback(self.blocksize_callback)
+			self.client.set_samplerate_callback(self.samplerate_callback)
+			self.client.set_process_callback(self.process_callback)
+			self.client.set_shutdown_callback(self.shutdown_callback)
+			self.client.set_xrun_callback(self.xrun_callback)
+			self.client.activate()
+			self.client.get_ports()
+			self.out_port = self.client.midi_outports.register('out')
 
 	@property
 	def bpm(self):
@@ -62,9 +68,7 @@ class Looper:
 		beats_per_second = self._bpm / 60
 		self.samples_per_beat = self.client.samplerate / beats_per_second
 		seconds_per_process = self.client.blocksize / self.client.samplerate
-		print('seconds_per_process', seconds_per_process)
 		self.beats_per_process = beats_per_second * seconds_per_process
-		print('beats_per_process', self.beats_per_process)
 
 	def stop(self):
 		logging.debug('STOP')
@@ -89,10 +93,9 @@ class Looper:
 		self.out_port.clear_buffer()
 		end_beat = self.beat + self.beats_per_process
 		while True:
-			events_this_block = np.ndarray(0, dtype = EVENTS_STRUCT)
-			for loop in self.loops:
-				loop_evts = loop.events_between(self.beat, end_beat)
-				events_this_block = np.hstack([ events_this_block, loop_evts ])
+			events_this_block = np.hstack([
+				loop.events_between(self.beat, end_beat) for loop in self.loops
+			])
 			if len(events_this_block):
 				np.sort(events_this_block, kind="heapsort", order="beat")
 				for evt in events_this_block:
@@ -100,7 +103,7 @@ class Looper:
 					if offset < 0:
 						logging.debug('negative offset')
 					else:
-						self.out_port.write_midi_event(offset, (evt['status'], evt['pitch'], evt['velocity']))
+						self.out_port.write_midi_event(offset, evt['msg'])
 			if end_beat < self.end_beat:
 				self.beat = end_beat
 				return
@@ -145,6 +148,12 @@ class JackShutdownError(Exception):
 	pass
 
 
+class FakeClient:
+
+	samplerate = 48000
+	blocksize = 1024
+
+
 class FakePort:
 
 	rc = 0
@@ -170,6 +179,10 @@ class LooperTestWindow(QMainWindow):
 		self.loop_button.toggled.connect(self.play_toggle)
 		lo.addWidget(self.loop_button)
 		self.label = QLabel('beat')
+		self.label.setAlignment(Qt.AlignCenter)
+		f = self.label.font()
+		f.setPixelSize(22)
+		self.label.setFont(f)
 		lo.addWidget(self.label)
 		frm.setLayout(lo)
 		self.setCentralWidget(frm)
@@ -183,11 +196,11 @@ class LooperTestWindow(QMainWindow):
 
 	@pyqtSlot()
 	def slot_timer_timeout(self):
-		self.label.setText("%.02f" % self.looper.beat)
+		self.label.setText("%.1f" % (self.looper.beat + 1.0))
 
 	@pyqtSlot()
 	def layout_complete(self):
-		self.looper.add_loop(Loop(33))
+		self.looper.add_loop(Loop.random())
 		self.update_timer.start()
 
 	@pyqtSlot(bool)
@@ -228,6 +241,7 @@ if __name__ == "__main__":
 	from PyQt5.QtWidgets import QShortcut
 	from PyQt5.QtWidgets import QGroupBox
 	from PyQt5.QtWidgets import QRadioButton
+	from qt_extras import DevilBox
 
 	p = argparse.ArgumentParser()
 	p.epilog = """
@@ -250,9 +264,13 @@ if __name__ == "__main__":
 	except KeyError:
 		pass
 	app = QApplication([])
-	main_window = LooperTestWindow(options)
-	main_window.show()
-	sys.exit(app.exec())
+	try:
+		main_window = LooperTestWindow(options)
+		main_window.show()
+		sys.exit(app.exec())
+	except JackOpenError:
+		DevilBox('Could not connect to JACK server. Is it running?')
+		sys.exit(1)
 
 
 #  end kitbash/gui.py

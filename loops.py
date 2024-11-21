@@ -10,13 +10,7 @@ from random import choice
 from mido import MidiFile
 
 
-EVENTS_STRUCT = np.dtype([
-	('beat', float),
-	('status', np.uint8),
-	('pitch', np.uint8),
-	('velocity', np.uint8)
-])
-
+EVENT_STRUCT = np.dtype([ ('beat', float), ('msg', np.uint8, 3) ])
 DEFAULT_BEATS_PER_MEASURE = 4
 DEFAULT_USECS_PER_BEAT = 500000
 USECS_PER_SECOND = 1000000
@@ -77,7 +71,7 @@ class Loop:
 					if self.events[j]['beat'] > end:
 						break
 				return self.events[i:j]
-		return np.ndarray(0, dtype = EVENTS_STRUCT)
+		return np.zeros(0, dtype = EVENT_STRUCT)
 
 	def __str__(self):
 		return '<Loop #{0.loop_id}: "{0.name}"; {0.beats_per_measure} beats per measure; {0.measures} measures; {0.event_count} events>'.format(self)
@@ -85,7 +79,7 @@ class Loop:
 	def print_events(self):
 		for i in range(len(self.events)):
 			print("{:3d}: ".format(i), end = "")
-			print("{:.3f}  0x{:x} {} {}".format(*self.events[i]))
+			print("{:.3f}  0x{:x} {} {}".format(self.events[i][0], *self.events[i][1]))
 
 
 class Loops:
@@ -94,6 +88,10 @@ class Loops:
 
 	@classmethod
 	def dbfile(cls):
+		try:
+			os.mkdir(os.path.join(user_config_dir(), 'ZenSoSo'))
+		except FileExistsError:
+			pass
 		return os.path.join(user_config_dir(), 'ZenSoSo', 'midibanks.db')
 
 	@classmethod
@@ -101,6 +99,11 @@ class Loops:
 		if cls._connection is None:
 			cls._connection = sqlite3.connect(cls.dbfile())
 			cls._connection.execute('PRAGMA foreign_keys = ON')
+			cls._connection.execute('PRAGMA foreign_keys = ON')
+			cursor = cls._connection.execute('SELECT name FROM sqlite_master WHERE type="table"')
+			rows = cursor.fetchall()
+			if len(rows) == 0:
+				cls.init_schema()
 		return cls._connection
 
 	@classmethod
@@ -150,14 +153,13 @@ class Loops:
 			loop_group = re.sub(r'(_|[^\w])+', ' ', os.path.dirname(filename).replace(base_dir, ''))
 			name = os.path.splitext(os.path.basename(filename))[0]
 			try:
-				beats_per_measure, measures, events = cls.read_midi_file(filename)
-				pitches_used = set([ int(evt['pitch']) for evt in events[:] ])
+				beats_per_measure, measures, pitches, events = cls.read_midi_file(filename)
 				evfile = io.BytesIO()
 				np.save(evfile, events)
 				evfile.seek(0)
 				cursor.execute(loop_sql, (loop_group, name, beats_per_measure, measures, evfile.read()))
 				row_id = cursor.fetchone()
-				cursor.executemany(pitch_sql, [ (row_id[0], pitch) for pitch in pitches_used ] )
+				cursor.executemany(pitch_sql, [ (row_id[0], pitch) for pitch in pitches ])
 				cls.conn().commit()
 			except Exception as e:
 				print('Failed to import {} {} "{}".'.format(name, type(e).__name__, e))
@@ -165,10 +167,11 @@ class Loops:
 	@classmethod
 	def read_midi_file(cls, midi_filename):
 		"""
-		Returns beats_per_measure, measures, events
+		Returns beats_per_measure, measures, pitches, events
 			beats_per_measure	: (int)
 			measures			: (int) measure count, rounded up
-			events				: nparray of EVENTS_STRUCT
+			pitches				: (set) pitches of a noteon events
+			events				: nparray of EVENT_STRUCT
 		"""
 
 		# Use mido to open
@@ -183,11 +186,12 @@ class Loops:
 		for msg in mid:
 			if msg.type == 'note_on':
 				note_event_count += 1
-		events = np.zeros(note_event_count, EVENTS_STRUCT)
+		events = np.zeros(note_event_count, EVENT_STRUCT)
 		# Initialize running vars
 		time = 0
 		ordinal = 0
 		measure = 0
+		pitches = []
 
 		for msg in mid:
 			if msg.type == 'set_tempo':
@@ -200,11 +204,12 @@ class Loops:
 			elif msg.type == 'note_on':
 				measure = int(time / seconds_per_measure)
 				beat = time / seconds_per_beat
-				b = msg.bytes()
-				events[ordinal] = ( beat, b[0], b[1], b[2] )
+				events[ordinal] = ( beat, msg.bytes() )
 				ordinal += 1
+				pitches.append(msg.note)
 			time += msg.time
-		return int(beats_per_measure), measure + 1, events
+
+		return int(beats_per_measure), measure + 1, set(pitches), events
 
 
 #  end kitbash/utils/loops.py
