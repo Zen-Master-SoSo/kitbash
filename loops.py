@@ -25,7 +25,7 @@ class Loop:
 		evfile = io.BytesIO(midi_events)
 		self.events = np.load(evfile)
 		self._beat_offset = 0
-		self._active = True
+		self._active = False
 
 	@property
 	def event_count(self):

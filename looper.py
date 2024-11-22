@@ -23,6 +23,7 @@ class Looper:
 		self._bpm = DEFAULT_BEATS_PER_MINUTE
 		self.beats_per_measure = None
 		self.beat = 0.0
+		self.end_beat = 0.0
 		self.loops = []
 		self.state = Looper.INACTIVE
 		self.__real_process_callback = self.null_process_callback
@@ -55,26 +56,66 @@ class Looper:
 		self._bpm = val
 		self.rescale()
 
-	def add_loop(self, loop):
-		if self.loaded_loop(loop.loop_id):
-			return
-		with Pause(self):
-			if self.beats_per_measure is None:
-				self.beats_per_measure = loop.beats_per_measure
-			elif loop.beats_per_measure != self.beats_per_measure:
+	def load_loop(self, loop_id):
+		"""
+		Loads a single loop, if not already loaded.
+		Returns the loaded loop.
+		Throws up if the loop's beats per measure does not
+		match all the loaded loop's beats per measure.
+		"""
+		loop = self._loaded_loop(loop_id)
+		if loop is None:
+			loop = Loop(loop_id)
+			if self.beats_per_measure is not None and \
+				loop.beats_per_measure != self.beats_per_measure:
 				raise Exception("beats_per_measure mismatch")
-			self.loops.append(loop)
-			last_beat = max([loop.last_beat for loop in self.loops])
-			self.end_beat = float(ceil(last_beat / self.beats_per_measure) * self.beats_per_measure)
+			with Pause(self):
+				self.beats_per_measure = loop.beats_per_measure
+				self.loops.append(loop)
+				self.remeasure()
+		return loop
 
-	def loaded_loop(self, loop_id):
+	def load_loops(self, loop_ids):
+		"""
+		Loads multiple loops, if not already loaded.
+		Returns a list of the loops loaded.
+		Ignores any loop if its beats per measure does not
+		match previous loaded loop's beats per measure,
+		(including the first loop loaded by this function if
+		no other loops are loaded)
+		"""
+		loops_to_load = set(loop_ids) ^ set(self.loaded_loop_ids())
+		if loops_to_load:
+			new_loops = [Loop(loop_id) for loop_id in loops_to_load]
+			if self.beats_per_measure is None:
+				self.beats_per_measure = new_loops[0].beats_per_measure
+			valid_new_loops = [ loop for loop in new_loops \
+								if loop.beats_per_measure == self.beats_per_measure ]
+			if valid_new_loops:
+				with Pause(self):
+					self.loops.extend(valid_new_loops)
+					self.remeasure()
+				return valid_new_loops
+		return []
+
+	def remeasure(self):
+		last_beat = max([loop.last_beat for loop in self.loops])
+		self.end_beat = float(ceil(last_beat / self.beats_per_measure) * self.beats_per_measure)
+		if self.beat > self.end_beat:
+			self.beat = 0.0
+
+	def _loaded_loop(self, loop_id):
 		for loop in self.loops:
 			if loop.loop_id == loop_id:
 				return loop
 
+	def loaded_loop_ids(self):
+		return [loop.loop_id for loop in self.loops]
+
 	def clear(self):
 		self.stop()
 		self.loops = []
+		self.beats_per_measure = None
 
 	def rescale(self):
 		beats_per_second = self._bpm / 60
@@ -100,26 +141,22 @@ class Looper:
 		pass
 
 	def play_process_callback(self, frames):
-		self.out_port.clear_buffer()
-		end_beat = self.beat + self.beats_per_process
-		while True:
-			if len(self.loops):
+		if len(self.loops):
+			self.out_port.clear_buffer()
+			end_beat = self.beat + self.beats_per_process
+			while True:
 				events_this_block = np.hstack([
 					loop.events_between(self.beat, end_beat) for loop in self.loops
 				])
 				if len(events_this_block):
-					np.sort(events_this_block, kind="heapsort", order="beat")
-					for evt in events_this_block:
+					for evt in np.sort(events_this_block, kind="heapsort", order="beat"):
 						offset = int((evt['beat'] - self.beat) * self.samples_per_beat)
-						if offset < 0:
-							logging.warn('negative offset')
-						elif offset < self.client.blocksize:
-							self.out_port.write_midi_event(offset, evt['msg'])
-			if end_beat < self.end_beat:
-				self.beat = end_beat
-				return
-			end_beat -= self.end_beat
-			self.beat = 0.0
+						self.out_port.write_midi_event(offset, evt['msg'])
+				if end_beat < self.end_beat:
+					self.beat = end_beat
+					break
+				end_beat -= self.end_beat
+				self.beat = 0.0
 
 	# -----------------------
 	# JACK callbacks
@@ -134,15 +171,15 @@ class Looper:
 		try:
 			self.__real_process_callback(frames)
 		except Exception as e:
-			logging.error(e)
+			logging.error('{} "{}"'.format(type(e).__name__, e))
 			raise CallbackExit
 
 	def shutdown_callback(self, status, reason):
 		"""
 		The argument status is of type jack.Status.
 		"""
+		logging.debug('JACK Shutdown')
 		if self.state != Looper.INACTIVE:
-			self.stop_everything()
 			raise JackShutdownError
 
 	def xrun_callback(self, delayed_usecs):
@@ -179,6 +216,7 @@ class FakePort:
 
 class LooperTestWindow(QMainWindow):
 
+	single_loop	= False # Set True to play one loop at a time
 	COLUMNS = 4
 
 	def __init__(self, options):
@@ -236,7 +274,7 @@ class LooperTestWindow(QMainWindow):
 		self.play_button = QPushButton(self)
 		self.play_button.setText('PLAY')
 		self.play_button.setCheckable(True)
-		#self.play_button.setEnabled(False)
+		self.play_button.setEnabled(False)
 		self.play_button.toggled.connect(self.play_toggle)
 		font = self.play_button.font()
 		font.setPixelSize(22)
@@ -268,29 +306,27 @@ class LooperTestWindow(QMainWindow):
 			self.frm_loops.removeChild(button)
 			button.deleteLater()
 		if text == '':
+			self.play_button.setEnabled(False)
 			return
 		ord_ = 0
-		for tup in Loops.group_loops(text):
+		ids_to_load = Loops.group_loops(text)
+		self.looper.load_loops([tup[0] for tup in ids_to_load])
+		for tup in ids_to_load:
 			button = QPushButton(tup[1], self.frm_loops)
 			button.setCheckable(True)
 			button.loop_id = tup[0]
 			button.toggled.connect(partial(self.loop_select, tup[0]))
 			self.frm_loops.layout().addWidget(button, int(ord_ / self.COLUMNS), ord_ % self.COLUMNS)
 			ord_ += 1
+		self.play_button.setEnabled(True)
 
 	@pyqtSlot(int, bool)
 	def loop_select(self, loop_id, state):
-		if state:
+		if state and self.single_loop:
 			for button in self.frm_loops.findChildren(QPushButton):
 				if button.loop_id != loop_id:
 					button.setChecked(False)
-			loop = self.looper.loaded_loop(loop_id)
-			if loop is None:
-				loop = Loop(loop_id)
-				self.looper.add_loop(loop)
-			loop.active = True
-		else:
-			self.looper.loaded_loop(loop_id).active = False
+		self.looper.load_loop(loop_id).active = state
 
 	@pyqtSlot(bool)
 	def play_toggle(self, state):
