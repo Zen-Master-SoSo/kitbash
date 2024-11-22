@@ -49,8 +49,9 @@ class MainWindow(QMainWindow):
 		if geometry is not None:
 			self.restoreGeometry(geometry)
 
-		self.drum_widgets = VListLayout()
+		self.drum_widgets = VListLayout(end_spacing = 8)
 		self.drum_widgets.setContentsMargins(0,0,0,0)
+		self.drum_widgets.setSpacing(0)
 		self.drums_scroll_contents.setLayout(self.drum_widgets)
 		self.threadpool = QThreadPool()
 		self.threadpool.setMaxThreadCount(1)
@@ -498,15 +499,15 @@ def main():
 	log_format = "[%(filename)24s:%(lineno)4d] %(levelname)-8s %(message)s"
 	if options.log_file:
 		logging.basicConfig(
-			filename=options.log_file,
-			filemode='w',
-			level= log_level,
-			format=log_format
+			filename = options.log_file,
+			filemode = 'w',
+			level = log_level,
+			format = log_format
 		)
 	else:
 		logging.basicConfig(
-			level= log_level,
-			format=log_format
+			level = log_level,
+			format = log_format
 		)
 
 	#-----------------------------------------------------------------------

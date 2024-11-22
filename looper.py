@@ -5,7 +5,7 @@
 import logging
 import numpy as np
 from math import ceil
-from jack import Client, Port, Status, JackOpenError, JackError, CallbackExit, STOPPED, ROLLING, STARTING, NETSTARTING
+from jack import Client, Port, Status, JackError, CallbackExit, STOPPED, ROLLING, STARTING, NETSTARTING
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QMainWindow
 from kitbash.loops import Loop, EVENT_STRUCT
@@ -210,6 +210,7 @@ class LooperTestWindow(QMainWindow):
 		self.play_button = QPushButton(self)
 		self.play_button.setText('PLAY')
 		self.play_button.setCheckable(True)
+		self.play_button.setEnabled(False)
 		self.play_button.toggled.connect(self.play_toggle)
 		font = self.play_button.font()
 		font.setPixelSize(22)
@@ -255,10 +256,15 @@ class LooperTestWindow(QMainWindow):
 	def shuffle(self):
 		with Pause(self.looper):
 			self.looper.clear_loops()
-			loop = Loop.random()
-			self.looper.add_loop(loop)
-		self.group_label.setText(loop.loop_group)
-		self.loop_label.setText(loop.name)
+			try:
+				loop = Loop.random()
+			except IndexError:
+				DevilBox('Failed choosing a random loop')
+			else:
+				self.looper.add_loop(loop)
+				self.group_label.setText(loop.loop_group)
+				self.loop_label.setText(loop.name)
+				self.play_button.setEnabled(True)
 
 	@pyqtSlot(int)
 	def set_bpm(self, bpm):
@@ -292,10 +298,6 @@ class Pause:
 			self.looper.play()
 
 
-
-
-# -----------------------------------------------------------------
-# main()
 
 if __name__ == "__main__":
 	import sys, os, json, glob, argparse
@@ -336,11 +338,11 @@ if __name__ == "__main__":
 	app = QApplication([])
 	try:
 		main_window = LooperTestWindow(options)
-		main_window.show()
-		sys.exit(app.exec())
-	except JackOpenError:
+	except JackError:
 		DevilBox('Could not connect to JACK server. Is it running?')
 		sys.exit(1)
+	main_window.show()
+	sys.exit(app.exec())
 
 
 #  end kitbash/gui.py

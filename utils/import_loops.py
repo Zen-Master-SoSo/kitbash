@@ -20,13 +20,9 @@ def main():
 		help="Show more detailed debug information.")
 	options = parser.parse_args()
 
-	#log_level = logging.DEBUG if options.verbose else logging.ERROR
-	log_level = logging.DEBUG
+	log_level = logging.DEBUG if options.verbose else logging.ERROR
 	log_format = "[%(filename)24s:%(lineno)4d] %(levelname)-8s %(message)s"
-	logging.basicConfig(
-		level= log_level,
-		format=log_format
-	)
+	logging.basicConfig(level = log_level, format = log_format)
 
 	if options.nuke:
 		Loops.init_schema()

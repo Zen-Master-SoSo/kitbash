@@ -18,8 +18,6 @@ USECS_PER_SECOND = 1000000
 
 class Loop:
 
-	loop_ids = None
-
 	def __init__(self, loop_id):
 		cursor = Loops.conn().cursor()
 		cursor.execute('SELECT * FROM loops WHERE loop_id = ?', (loop_id,))
@@ -30,11 +28,7 @@ class Loop:
 
 	@classmethod
 	def random(cls):
-		if cls.loop_ids is None:
-			cursor = Loops.conn().cursor()
-			cursor.execute('SELECT loop_id FROM loops')
-			cls.loop_ids = [ row[0] for row in cursor.fetchall() ]
-		return Loop(choice(cls.loop_ids))
+		return Loop(choice(Loops.loop_ids()))
 
 	@property
 	def event_count(self):
@@ -89,6 +83,7 @@ class Loop:
 class Loops:
 
 	_connection = None
+	_loop_ids = None
 
 	@classmethod
 	def dbfile(cls):
@@ -147,7 +142,6 @@ class Loops:
 		loop_sql = """
 			INSERT INTO loops(loop_group, name, beats_per_measure, measures, midi_events)
 			VALUES (?,?,?,?,?)
-			RETURNING loop_id
 			"""
 		pitch_sql = """
 			INSERT INTO pitches VALUES (?,?)
@@ -162,11 +156,10 @@ class Loops:
 				np.save(evfile, events)
 				evfile.seek(0)
 				cursor.execute(loop_sql, (loop_group, name, beats_per_measure, measures, evfile.read()))
-				row_id = cursor.fetchone()
-				cursor.executemany(pitch_sql, [ (row_id[0], pitch) for pitch in pitches ])
+				cursor.executemany(pitch_sql, [ (cursor.lastrowid, pitch) for pitch in pitches ])
 				cls.conn().commit()
 			except Exception as e:
-				print('Failed to import {} {} "{}".'.format(name, type(e).__name__, e))
+				print('Failed to import {}. ERROR {} "{}".'.format(name, type(e).__name__, e))
 
 	@classmethod
 	def read_midi_file(cls, midi_filename):
@@ -215,5 +208,16 @@ class Loops:
 
 		return int(beats_per_measure), measure + 1, set(pitches), events
 
+	@classmethod
+	def loop_ids(cls):
+		if cls._loop_ids is None:
+			cursor = Loops.conn().cursor()
+			cursor.execute('SELECT loop_id FROM loops')
+			cls._loop_ids = [ row[0] for row in cursor.fetchall() ]
+		return cls._loop_ids
+
+
+if __name__ == "__main__":
+	print(len(Loops.loop_ids()), 'loops')
 
 #  end kitbash/utils/loops.py

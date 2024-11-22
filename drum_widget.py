@@ -2,12 +2,14 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
-import logging
+import os, logging
 from functools import partial
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtCore import QSize
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QHBoxLayout
@@ -28,13 +30,41 @@ class DrumWidget(QFrame):
 		self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 		self.setFrameStyle(QFrame.Panel | QFrame.Raised)
 		self.setObjectName('drum_widget')
-		top_layout = QVBoxLayout()
+
+		main_layout = QVBoxLayout()
+		main_layout.setContentsMargins(2,2,2,2)
+		main_layout.setSpacing(2)
+
+		top_layout = QHBoxLayout()
 		top_layout.setContentsMargins(2,2,2,2)
 		top_layout.setSpacing(2)
-		label = QLabel(self.drumkit.filename)
-		label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-		label.setIndent(8)
+
+		my_dir = os.path.dirname(__file__)
+		self.icon_expanded = QIcon(os.path.join(my_dir, 'res', 'group_expanded.svg'))
+		self.icon_hidden = QIcon(os.path.join(my_dir, 'res', 'group_hidden.svg'))
+
+		self.hide_button = QPushButton(self)
+		self.hide_button.setIcon(self.icon_expanded)
+		self.hide_button.setIconSize(QSize(16,16))
+		self.hide_button.setFixedWidth(24)
+		self.hide_button.setFixedHeight(24)
+		self.hide_button.setCheckable(True)
+		self.hide_button.toggled.connect(self.hide)
+		top_layout.addWidget(self.hide_button)
+
+		self.lbl_use_count = QLabel(self)
+		self.lbl_use_count.setText('(0)')
+		self.lbl_use_count.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
+		top_layout.addWidget(self.lbl_use_count)
+
+		label = QLabel(self)
+		label.setText(self.drumkit.filename)
 		top_layout.addWidget(label)
+
+		top_layout.addStretch(20)
+		main_layout.addItem(top_layout)
+
+		self.frm_groups = QFrame(self)
 		self.groups = QHBoxLayout()
 		self.groups.setContentsMargins(2,2,2,2)
 		self.groups.setSpacing(2)
@@ -42,11 +72,11 @@ class DrumWidget(QFrame):
 			if group.empty():
 				continue
 			group_frame = GroupFrame()
-			group_frame.setFrameStyle(QFrame.Box)
+			group_frame.setFrameShape(QFrame.NoFrame)
 			group_frame.setMidLineWidth(2)
 			group_frame.setObjectName(group.group_id)	# GroupFrame identified by group_id
 			group_layout = QVBoxLayout()
-			group_layout.setSpacing(2)
+			group_layout.setSpacing(0)
 			group_layout.setContentsMargins(0,0,0,0)
 			group_button = GroupButton(group_frame)		# GroupButton has no unique object name
 			group_button.setText(group.name)
@@ -63,8 +93,10 @@ class DrumWidget(QFrame):
 			group_layout.addStretch()
 			group_frame.setLayout(group_layout)
 			self.groups.addWidget(group_frame)
-		top_layout.addLayout(self.groups)
-		self.setLayout(top_layout)
+
+		self.frm_groups.setLayout(self.groups)
+		main_layout.addWidget(self.frm_groups)
+		self.setLayout(main_layout)
 
 	@pyqtSlot(str, QPushButton)
 	def group_select(self, group_id, button):
@@ -73,12 +105,33 @@ class DrumWidget(QFrame):
 			button.setChecked(state)
 			button.setEnabled(not state)
 		self.sig_group_select.emit(self.drumkit.name, group_id, button.isChecked(), self.ctrl_pressed())
+		self.update_count()
 
 	@pyqtSlot(str, QPushButton)
 	def inst_select(self, inst_id, button):
 		if button.isChecked():
 			button.parentWidget().findChild(GroupButton).setChecked(False)
 		self.sig_inst_select.emit(self.drumkit.name, inst_id, button.isChecked(), self.ctrl_pressed())
+		self.update_count()
+
+	@pyqtSlot(bool)
+	def hide(self, state):
+		if state:
+			self.initial_height = self.height()
+			self.frm_groups.hide()
+			self.setFixedHeight(34)
+			self.hide_button.setIcon(self.icon_hidden)
+		else:
+			self.frm_groups.show()
+			self.setFixedHeight(self.initial_height)
+			self.hide_button.setIcon(self.icon_expanded)
+
+	def update_count(self):
+		use_count = len([ b for b in self.frm_groups.findChildren(InstrumentButton) if b.isChecked() ])
+		self.lbl_use_count.setText('(%d)' % use_count)
+		font = self.lbl_use_count.font()
+		font.setBold(use_count > 0)
+		self.lbl_use_count.setFont(font)
 
 	def ctrl_pressed(self):
 		return QApplication.keyboardModifiers() == Qt.ControlModifier
@@ -89,6 +142,7 @@ class DrumWidget(QFrame):
 			return logging.error('Could not find frame ' + group_id)
 		for button in frame.findChildren(QPushButton):
 			button.setChecked(False)
+		self.update_count()
 
 	def deselect_inst(self, inst_id):
 		button = self.findChild(InstrumentButton, inst_id)
@@ -100,6 +154,7 @@ class DrumWidget(QFrame):
 		group_frame.findChild(GroupButton).setChecked(False)
 		for button in group_frame.findChildren(QPushButton):
 			button.setEnabled(True)
+		self.update_count()
 
 
 class GroupFrame(QFrame):
