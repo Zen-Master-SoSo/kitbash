@@ -5,10 +5,10 @@
 import logging
 import numpy as np
 from math import ceil
-from jack import Client, Port, Status, JackError, CallbackExit, STOPPED, ROLLING, STARTING, NETSTARTING
+from jack import Client, JackError, CallbackExit
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QMainWindow
-from kitbash.loops import Loop, EVENT_STRUCT
+from kitbash.loops import Loop, Loops, EVENT_STRUCT
 
 DEFAULT_BEATS_PER_MINUTE = 120
 
@@ -55,7 +55,7 @@ class Looper:
 		self._bpm = val
 		self.rescale()
 
-	def add_loop(self, loop, starting_beat=0):
+	def add_loop(self, loop):
 		with Pause(self):
 			if self.beats_per_measure is None:
 				self.beats_per_measure = loop.beats_per_measure
@@ -65,7 +65,12 @@ class Looper:
 			last_beat = max([loop.last_beat for loop in self.loops])
 			self.end_beat = float(ceil(last_beat / self.beats_per_measure) * self.beats_per_measure)
 
-	def clear_loops(self):
+	def loop(self, loop_id):
+		for loop in self.loops:
+			if loop.loop_id == loop_id:
+				return loop
+
+	def clear(self):
 		with Pause(self):
 			self.loops = []
 
@@ -84,12 +89,6 @@ class Looper:
 		logging.debug('PLAY')
 		self.__real_process_callback = self.play_process_callback
 		self.state = Looper.PLAYING
-
-	def rewind(self):
-		logging.debug('REWIND')
-		for loop in self.loops:
-			loop.reset_iteration()
-		self.beat = 0.0
 
 	def null_process_callback(self, frames):
 		pass
@@ -174,6 +173,8 @@ class FakePort:
 
 class LooperTestWindow(QMainWindow):
 
+	COLUMNS = 4
+
 	def __init__(self, options):
 		super().__init__()
 		self._options = options
@@ -181,46 +182,60 @@ class LooperTestWindow(QMainWindow):
 
 		window_frame = QFrame()
 		main_layout = QVBoxLayout()
+
+		group_layout = QHBoxLayout()
+		group_layout.setSpacing(6)
+		lbl = QLabel('Group:')
+		lbl.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
+		group_layout.addWidget(lbl)
+		self.cmb_group = QComboBox(self)
+		self.cmb_group.addItem('')
+		self.cmb_group.addItems(Loops.groups())
+		self.cmb_group.currentTextChanged.connect(self.group_changed)
+		group_layout.addWidget(self.cmb_group)
+		main_layout.addItem(group_layout)
+
+		self.frm_loops = QFrame()
+		loops_layout = QGridLayout()
+		loops_layout.setContentsMargins(2,2,2,2)
+		loops_layout.setSpacing(2)
+		self.frm_loops.setLayout(loops_layout)
+		main_layout.addWidget(self.frm_loops)
+
 		beat_layout = QHBoxLayout()
+		beat_layout.addSpacing(10)
 
-		self.group_label = QLabel('group')
-		main_layout.addWidget(self.group_label)
-
-		self.loop_label = QLabel('loop')
-		main_layout.addWidget(self.loop_label)
-
-		spinner_label = QLabel('BPM:')
-		beat_layout.addWidget(spinner_label)
+		lbl = QLabel('BPM:')
+		lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+		beat_layout.addWidget(lbl)
 
 		self.beat_spinner = QSpinBox(self)
 		self.beat_spinner.setMinimum(30)
 		self.beat_spinner.setMaximum(280)
 		self.beat_spinner.setValue(DEFAULT_BEATS_PER_MINUTE)
 		self.beat_spinner.valueChanged.connect(self.set_bpm)
+		self.beat_spinner.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 		beat_layout.addWidget(self.beat_spinner)
 
-		self.beat_label = QLabel('beat')
+		self.beat_label = QLabel('0')
 		font = self.beat_label.font()
 		font.setPixelSize(32)
 		self.beat_label.setFont(font)
+		self.beat_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 		beat_layout.addWidget(self.beat_label)
 
+		beat_layout.addSpacing(10)
 		main_layout.addItem(beat_layout)
 
 		self.play_button = QPushButton(self)
 		self.play_button.setText('PLAY')
 		self.play_button.setCheckable(True)
-		self.play_button.setEnabled(False)
+		#self.play_button.setEnabled(False)
 		self.play_button.toggled.connect(self.play_toggle)
 		font = self.play_button.font()
 		font.setPixelSize(22)
 		self.play_button.setFont(font)
 		main_layout.addWidget(self.play_button)
-
-		self.shuffle_button = QPushButton(self)
-		self.shuffle_button.setText('Shuffle')
-		self.shuffle_button.clicked.connect(self.shuffle)
-		main_layout.addWidget(self.shuffle_button)
 
 		window_frame.setLayout(main_layout)
 		for label in window_frame.findChildren(QLabel):
@@ -234,28 +249,53 @@ class LooperTestWindow(QMainWindow):
 		self.update_timer = QTimer()
 		self.update_timer.setInterval(int(1 / 8 * 1000))
 		self.update_timer.timeout.connect(self.slot_timer_timeout)
-		QTimer.singleShot(0, self.layout_complete)
 
 	@pyqtSlot()
 	def slot_timer_timeout(self):
 		self.beat_label.setText("%.1f" % (self.looper.beat + 1.0))
 
-	@pyqtSlot()
-	def layout_complete(self):
-		self.shuffle()
-		self.update_timer.start()
+	@pyqtSlot(str)
+	def group_changed(self, text):
+		self.looper.clear()
+		for button in self.frm_loops.findChildren(QPushButton):
+			self.frm_loops.removeChild(button)
+			button.deleteLater()
+		if text == '':
+			return
+		ord_ = 0
+		for tup in Loops.group_loops(text):
+			button = QPushButton(tup[1], self.frm_loops)
+			button.setCheckable(True)
+			button.toggled.connect(partial(self.loop_select, tup[0]))
+			self.frm_loops.layout().addWidget(button, int(ord_ / self.COLUMNS), ord_ % self.COLUMNS)
+			ord_ += 1
+
+	@pyqtSlot(int, bool)
+	def loop_select(self, loop_id, state):
+		if state:
+			for button in self.frm_loops.findChildren(QPushButton):
+				button.setChecked(False)
+			loop = self.looper.loop(loop_id)
+			if loop is None:
+				loop = Loop(loop_id)
+				self.looper.add_loop(loop)
+			loop.active = True
+		else:
+			self.looper.loop(loop_id).active = False
 
 	@pyqtSlot(bool)
 	def play_toggle(self, state):
 		if state:
+			self.update_timer.start()
 			self.looper.play()
 		else:
+			self.update_timer.stop()
 			self.looper.stop()
 
 	@pyqtSlot()
 	def shuffle(self):
 		with Pause(self.looper):
-			self.looper.clear_loops()
+			self.looper.clear()
 			try:
 				loop = Loop.random()
 			except IndexError:
@@ -304,19 +344,18 @@ if __name__ == "__main__":
 	from functools import partial
 	from PyQt5.QtCore import Qt
 	from PyQt5.QtCore import QTimer
-	from PyQt5.QtWidgets import QFileDialog
 	from PyQt5.QtGui import QKeySequence
+	from PyQt5.QtWidgets import QApplication
+	from PyQt5.QtWidgets import QShortcut
 	from PyQt5.QtWidgets import QLabel
 	from PyQt5.QtWidgets import QPushButton
-	from PyQt5.QtWidgets import QWidget
 	from PyQt5.QtWidgets import QFrame
+	from PyQt5.QtWidgets import QComboBox
 	from PyQt5.QtWidgets import QSpinBox
 	from PyQt5.QtWidgets import QVBoxLayout
 	from PyQt5.QtWidgets import QHBoxLayout
-	from PyQt5.QtWidgets import QApplication
-	from PyQt5.QtWidgets import QShortcut
-	from PyQt5.QtWidgets import QGroupBox
-	from PyQt5.QtWidgets import QRadioButton
+	from PyQt5.QtWidgets import QGridLayout
+	from PyQt5.QtWidgets import QSizePolicy
 	from qt_extras import DevilBox
 
 	p = argparse.ArgumentParser()

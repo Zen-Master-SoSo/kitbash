@@ -25,6 +25,7 @@ class Loop:
 		evfile = io.BytesIO(midi_events)
 		self.events = np.load(evfile)
 		self._beat_offset = 0
+		self._active = True
 
 	@classmethod
 	def random(cls):
@@ -59,16 +60,25 @@ class Loop:
 		self.events['beat'] += (val - self._beat_offset)
 		self._beat_offset = val
 
+	@property
+	def active(self):
+		return self._active
+
+	@active.setter
+	def active(self, state):
+		self._active = state
+
 	def events_between(self, start, end):
 		"""
 		Returns events whose "beat" is >= start and < end
 		"""
-		for i in range(len(self.events)):
-			if self.events[i]['beat'] >= start:
-				for j in range(i, len(self.events)):
-					if self.events[j]['beat'] > end:
-						break
-				return self.events[i:j]
+		if self._active:
+			for i in range(len(self.events)):
+				if self.events[i]['beat'] >= start:
+					for j in range(i, len(self.events)):
+						if self.events[j]['beat'] > end:
+							break
+					return self.events[i:j]
 		return np.zeros(0, dtype = EVENT_STRUCT)
 
 	def __str__(self):
@@ -84,6 +94,7 @@ class Loops:
 
 	_connection = None
 	_loop_ids = None
+	_groups = None
 
 	@classmethod
 	def dbfile(cls):
@@ -207,6 +218,23 @@ class Loops:
 			time += msg.time
 
 		return int(beats_per_measure), measure + 1, set(pitches), events
+
+	@classmethod
+	def groups(cls):
+		if cls._groups is None:
+			cursor = Loops.conn().cursor()
+			cursor.execute('SELECT DISTINCT(loop_group) FROM loops')
+			cls._groups = [ row[0] for row in cursor.fetchall() ]
+		return cls._groups
+
+	@classmethod
+	def group_loops(cls, loop_group):
+		"""
+		Returns list of tuples, each containing (loop_id, name)
+		"""
+		cursor = Loops.conn().cursor()
+		cursor.execute('SELECT loop_id, name FROM loops WHERE loop_group = ?', (loop_group,))
+		return cursor.fetchall()
 
 	@classmethod
 	def loop_ids(cls):
