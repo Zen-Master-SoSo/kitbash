@@ -18,6 +18,8 @@ USECS_PER_SECOND = 1000000
 
 class Loop:
 
+	loop_ids = None
+
 	def __init__(self, loop_id):
 		cursor = Loops.conn().cursor()
 		cursor.execute('SELECT * FROM loops WHERE loop_id = ?', (loop_id,))
@@ -28,9 +30,11 @@ class Loop:
 
 	@classmethod
 	def random(cls):
-		cursor = Loops.conn().cursor()
-		cursor.execute('SELECT loop_id FROM loops')
-		return Loop(choice(cursor.fetchall()[0]))
+		if cls.loop_ids is None:
+			cursor = Loops.conn().cursor()
+			cursor.execute('SELECT loop_id FROM loops')
+			cls.loop_ids = [ row[0] for row in cursor.fetchall() ]
+		return Loop(choice(cls.loop_ids))
 
 	@property
 	def event_count(self):

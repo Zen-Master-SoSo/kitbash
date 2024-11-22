@@ -13,6 +13,7 @@ from kitbash.loops import Loop, EVENT_STRUCT
 DEFAULT_BEATS_PER_MINUTE = 120
 
 
+
 class Looper:
 
 	# state constants:
@@ -24,6 +25,7 @@ class Looper:
 		self.beats_per_measure = None
 		self.beat = 0.0
 		self.loops = []
+		self.state = Looper.INACTIVE
 		self.__real_process_callback = self.null_process_callback
 		self.client_name = client_name
 		if test:
@@ -55,14 +57,18 @@ class Looper:
 		self.rescale()
 
 	def add_loop(self, loop, starting_beat=0):
-		assert(isinstance(loop, Loop))
-		if self.beats_per_measure is None:
-			self.beats_per_measure = loop.beats_per_measure
-		elif loop.beats_per_measure != self.beats_per_measure:
-			raise Exception("beats_per_measure mismatch")
-		self.loops.append(loop)
-		last_beat = max([loop.last_beat for loop in self.loops])
-		self.end_beat = float(ceil(last_beat / self.beats_per_measure) * self.beats_per_measure)
+		with Pause(self):
+			if self.beats_per_measure is None:
+				self.beats_per_measure = loop.beats_per_measure
+			elif loop.beats_per_measure != self.beats_per_measure:
+				raise Exception("beats_per_measure mismatch")
+			self.loops.append(loop)
+			last_beat = max([loop.last_beat for loop in self.loops])
+			self.end_beat = float(ceil(last_beat / self.beats_per_measure) * self.beats_per_measure)
+
+	def clear_loops(self):
+		with Pause(self):
+			self.loops = []
 
 	def rescale(self):
 		beats_per_second = self._bpm / 60
@@ -73,12 +79,12 @@ class Looper:
 	def stop(self):
 		logging.debug('STOP')
 		self.__real_process_callback = self.null_process_callback
-		self.state = self.INACTIVE
+		self.state = Looper.INACTIVE
 
 	def play(self):
 		logging.debug('PLAY')
 		self.__real_process_callback = self.play_process_callback
-		self.state = self.PLAYING
+		self.state = Looper.PLAYING
 
 	def rewind(self):
 		logging.debug('REWIND')
@@ -93,17 +99,18 @@ class Looper:
 		self.out_port.clear_buffer()
 		end_beat = self.beat + self.beats_per_process
 		while True:
-			events_this_block = np.hstack([
-				loop.events_between(self.beat, end_beat) for loop in self.loops
-			])
-			if len(events_this_block):
-				np.sort(events_this_block, kind="heapsort", order="beat")
-				for evt in events_this_block:
-					offset = int((evt['beat'] - self.beat) * self.samples_per_beat)
-					if offset < 0:
-						logging.debug('negative offset')
-					else:
-						self.out_port.write_midi_event(offset, evt['msg'])
+			if len(self.loops):
+				events_this_block = np.hstack([
+					loop.events_between(self.beat, end_beat) for loop in self.loops
+				])
+				if len(events_this_block):
+					np.sort(events_this_block, kind="heapsort", order="beat")
+					for evt in events_this_block:
+						offset = int((evt['beat'] - self.beat) * self.samples_per_beat)
+						if offset < 0:
+							logging.warn('negative offset')
+						else:
+							self.out_port.write_midi_event(offset, evt['msg'])
 			if end_beat < self.end_beat:
 				self.beat = end_beat
 				return
@@ -130,7 +137,7 @@ class Looper:
 		"""
 		The argument status is of type jack.Status.
 		"""
-		if self.state != self.INACTIVE:
+		if self.state != Looper.INACTIVE:
 			self.stop_everything()
 			raise JackShutdownError
 
@@ -171,20 +178,33 @@ class LooperTestWindow(QMainWindow):
 	def __init__(self, options):
 		super().__init__()
 		self._options = options
-		frm = QFrame()
+		self.setWindowTitle('Looper')
 		lo = QVBoxLayout()
-		self.loop_button = QPushButton(self)
-		self.loop_button.setText('PLAY')
-		self.loop_button.setCheckable(True)
-		self.loop_button.toggled.connect(self.play_toggle)
-		lo.addWidget(self.loop_button)
-		self.label = QLabel('beat')
-		self.label.setAlignment(Qt.AlignCenter)
-		f = self.label.font()
-		f.setPixelSize(22)
-		self.label.setFont(f)
-		lo.addWidget(self.label)
+		self.group_label = QLabel('group')
+		lo.addWidget(self.group_label)
+		self.loop_label = QLabel('loop')
+		lo.addWidget(self.loop_label)
+		self.beat_label = QLabel('beat')
+		font = self.beat_label.font()
+		font.setPixelSize(32)
+		self.beat_label.setFont(font)
+		lo.addWidget(self.beat_label)
+		self.play_button = QPushButton(self)
+		self.play_button.setText('PLAY')
+		self.play_button.setCheckable(True)
+		self.play_button.toggled.connect(self.play_toggle)
+		font = self.play_button.font()
+		font.setPixelSize(22)
+		self.play_button.setFont(font)
+		lo.addWidget(self.play_button)
+		self.shuffle_button = QPushButton(self)
+		self.shuffle_button.setText('Shuffle')
+		self.shuffle_button.clicked.connect(self.shuffle)
+		lo.addWidget(self.shuffle_button)
+		frm = QFrame()
 		frm.setLayout(lo)
+		for label in frm.findChildren(QLabel):
+			label.setAlignment(Qt.AlignCenter)
 		self.setCentralWidget(frm)
 		self.quit_shortcut = QShortcut(QKeySequence('Ctrl+Q'), self)
 		self.quit_shortcut.activated.connect(self.close)
@@ -196,11 +216,11 @@ class LooperTestWindow(QMainWindow):
 
 	@pyqtSlot()
 	def slot_timer_timeout(self):
-		self.label.setText("%.1f" % (self.looper.beat + 1.0))
+		self.beat_label.setText("%.1f" % (self.looper.beat + 1.0))
 
 	@pyqtSlot()
 	def layout_complete(self):
-		self.looper.add_loop(Loop.random())
+		self.shuffle()
 		self.update_timer.start()
 
 	@pyqtSlot(bool)
@@ -210,8 +230,16 @@ class LooperTestWindow(QMainWindow):
 		else:
 			self.looper.stop()
 
+	@pyqtSlot()
+	def shuffle(self):
+		with Pause(self.looper):
+			self.looper.clear_loops()
+			loop = Loop.random()
+			self.looper.add_loop(loop)
+		self.group_label.setText(loop.loop_group)
+		self.loop_label.setText(loop.name)
+
 	def closeEvent(self, event):
-		logging.debug('MainWindow close()')
 		self.looper.stop()
 		event.accept()
 
@@ -220,12 +248,32 @@ class LooperTestWindow(QMainWindow):
 		self.close()
 
 
+class Pause:
+	"""
+	A context manager that remembers what state a Looper is in,
+	stops it, lets you do work, and then restarts it if it had
+	been running.
+	"""
+
+	def __init__(self, looper):
+		self.looper = looper
+		self.previous_state = looper.state
+
+	def __enter__(self):
+		self.looper.stop()
+
+	def __exit__(self, *_):
+		if self.previous_state == Looper.PLAYING:
+			self.looper.play()
+
+
+
 
 # -----------------------------------------------------------------
 # main()
 
 if __name__ == "__main__":
-	import sys, os, logging, json, glob, argparse
+	import sys, os, json, glob, argparse
 	from functools import partial
 	from PyQt5.QtCore import Qt
 	from PyQt5.QtCore import QTimer
@@ -251,13 +299,9 @@ if __name__ == "__main__":
 	p.add_argument("--verbose", "-v", action="store_true", help="Show more detailed debug information")
 	options = p.parse_args()
 
-	#log_level = logging.DEBUG if options.verbose else logging.ERROR
-	log_level = logging.DEBUG
+	log_level = logging.DEBUG if options.verbose else logging.ERROR
 	log_format = "[%(filename)24s:%(lineno)4d] %(levelname)-8s %(message)s"
-	logging.basicConfig(
-		level= log_level,
-		format=log_format
-	)
+	logging.basicConfig(level = log_level, format = log_format)
 
 	try:
 		del os.environ['SESSION_MANAGER']
