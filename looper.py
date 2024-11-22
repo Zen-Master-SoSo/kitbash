@@ -13,7 +13,6 @@ from kitbash.loops import Loop, EVENT_STRUCT
 DEFAULT_BEATS_PER_MINUTE = 120
 
 
-
 class Looper:
 
 	# state constants:
@@ -109,7 +108,7 @@ class Looper:
 						offset = int((evt['beat'] - self.beat) * self.samples_per_beat)
 						if offset < 0:
 							logging.warn('negative offset')
-						else:
+						elif offset < self.client.blocksize:
 							self.out_port.write_midi_event(offset, evt['msg'])
 			if end_beat < self.end_beat:
 				self.beat = end_beat
@@ -179,16 +178,35 @@ class LooperTestWindow(QMainWindow):
 		super().__init__()
 		self._options = options
 		self.setWindowTitle('Looper')
-		lo = QVBoxLayout()
+
+		window_frame = QFrame()
+		main_layout = QVBoxLayout()
+		beat_layout = QHBoxLayout()
+
 		self.group_label = QLabel('group')
-		lo.addWidget(self.group_label)
+		main_layout.addWidget(self.group_label)
+
 		self.loop_label = QLabel('loop')
-		lo.addWidget(self.loop_label)
+		main_layout.addWidget(self.loop_label)
+
+		spinner_label = QLabel('BPM:')
+		beat_layout.addWidget(spinner_label)
+
+		self.beat_spinner = QSpinBox(self)
+		self.beat_spinner.setMinimum(30)
+		self.beat_spinner.setMaximum(280)
+		self.beat_spinner.setValue(DEFAULT_BEATS_PER_MINUTE)
+		self.beat_spinner.valueChanged.connect(self.set_bpm)
+		beat_layout.addWidget(self.beat_spinner)
+
 		self.beat_label = QLabel('beat')
 		font = self.beat_label.font()
 		font.setPixelSize(32)
 		self.beat_label.setFont(font)
-		lo.addWidget(self.beat_label)
+		beat_layout.addWidget(self.beat_label)
+
+		main_layout.addItem(beat_layout)
+
 		self.play_button = QPushButton(self)
 		self.play_button.setText('PLAY')
 		self.play_button.setCheckable(True)
@@ -196,18 +214,21 @@ class LooperTestWindow(QMainWindow):
 		font = self.play_button.font()
 		font.setPixelSize(22)
 		self.play_button.setFont(font)
-		lo.addWidget(self.play_button)
+		main_layout.addWidget(self.play_button)
+
 		self.shuffle_button = QPushButton(self)
 		self.shuffle_button.setText('Shuffle')
 		self.shuffle_button.clicked.connect(self.shuffle)
-		lo.addWidget(self.shuffle_button)
-		frm = QFrame()
-		frm.setLayout(lo)
-		for label in frm.findChildren(QLabel):
+		main_layout.addWidget(self.shuffle_button)
+
+		window_frame.setLayout(main_layout)
+		for label in window_frame.findChildren(QLabel):
 			label.setAlignment(Qt.AlignCenter)
-		self.setCentralWidget(frm)
+		self.setCentralWidget(window_frame)
+
 		self.quit_shortcut = QShortcut(QKeySequence('Ctrl+Q'), self)
 		self.quit_shortcut.activated.connect(self.close)
+
 		self.looper = Looper()
 		self.update_timer = QTimer()
 		self.update_timer.setInterval(int(1 / 8 * 1000))
@@ -238,6 +259,10 @@ class LooperTestWindow(QMainWindow):
 			self.looper.add_loop(loop)
 		self.group_label.setText(loop.loop_group)
 		self.loop_label.setText(loop.name)
+
+	@pyqtSlot(int)
+	def set_bpm(self, bpm):
+		self.looper.bpm = bpm
 
 	def closeEvent(self, event):
 		self.looper.stop()
@@ -283,6 +308,7 @@ if __name__ == "__main__":
 	from PyQt5.QtWidgets import QPushButton
 	from PyQt5.QtWidgets import QWidget
 	from PyQt5.QtWidgets import QFrame
+	from PyQt5.QtWidgets import QSpinBox
 	from PyQt5.QtWidgets import QVBoxLayout
 	from PyQt5.QtWidgets import QHBoxLayout
 	from PyQt5.QtWidgets import QApplication
