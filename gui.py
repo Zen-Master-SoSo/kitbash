@@ -49,7 +49,7 @@ class MainWindow(QMainWindow):
 		if geometry is not None:
 			self.restoreGeometry(geometry)
 
-		self.drum_widgets = VListLayout(end_spacing = 8)
+		self.drum_widgets = VListLayout(end_space = 8)
 		self.drum_widgets.setContentsMargins(0,0,0,0)
 		self.drum_widgets.setSpacing(0)
 		self.drums_scroll_contents.setLayout(self.drum_widgets)
