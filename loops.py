@@ -27,10 +27,6 @@ class Loop:
 		self._beat_offset = 0
 		self._active = True
 
-	@classmethod
-	def random(cls):
-		return Loop(choice(Loops.loop_ids()))
-
 	@property
 	def event_count(self):
 		"""
@@ -243,6 +239,11 @@ class Loops:
 			cursor.execute('SELECT loop_id FROM loops')
 			cls._loop_ids = [ row[0] for row in cursor.fetchall() ]
 		return cls._loop_ids
+
+	@classmethod
+	def random_loop(cls):
+		return Loop(choice(cls.loop_ids()))
+
 
 
 if __name__ == "__main__":

@@ -56,6 +56,8 @@ class Looper:
 		self.rescale()
 
 	def add_loop(self, loop):
+		if self.loaded_loop(loop.loop_id):
+			return
 		with Pause(self):
 			if self.beats_per_measure is None:
 				self.beats_per_measure = loop.beats_per_measure
@@ -65,14 +67,14 @@ class Looper:
 			last_beat = max([loop.last_beat for loop in self.loops])
 			self.end_beat = float(ceil(last_beat / self.beats_per_measure) * self.beats_per_measure)
 
-	def loop(self, loop_id):
+	def loaded_loop(self, loop_id):
 		for loop in self.loops:
 			if loop.loop_id == loop_id:
 				return loop
 
 	def clear(self):
-		with Pause(self):
-			self.loops = []
+		self.stop()
+		self.loops = []
 
 	def rescale(self):
 		beats_per_second = self._bpm / 60
@@ -81,11 +83,15 @@ class Looper:
 		self.beats_per_process = beats_per_second * seconds_per_process
 
 	def stop(self):
+		if self.state == Looper.INACTIVE:
+			return
 		logging.debug('STOP')
 		self.__real_process_callback = self.null_process_callback
 		self.state = Looper.INACTIVE
 
 	def play(self):
+		if self.state == Looper.PLAYING:
+			return
 		logging.debug('PLAY')
 		self.__real_process_callback = self.play_process_callback
 		self.state = Looper.PLAYING
@@ -256,6 +262,7 @@ class LooperTestWindow(QMainWindow):
 
 	@pyqtSlot(str)
 	def group_changed(self, text):
+		self.looper.stop()
 		self.looper.clear()
 		for button in self.frm_loops.findChildren(QPushButton):
 			self.frm_loops.removeChild(button)
@@ -266,6 +273,7 @@ class LooperTestWindow(QMainWindow):
 		for tup in Loops.group_loops(text):
 			button = QPushButton(tup[1], self.frm_loops)
 			button.setCheckable(True)
+			button.loop_id = tup[0]
 			button.toggled.connect(partial(self.loop_select, tup[0]))
 			self.frm_loops.layout().addWidget(button, int(ord_ / self.COLUMNS), ord_ % self.COLUMNS)
 			ord_ += 1
@@ -274,14 +282,15 @@ class LooperTestWindow(QMainWindow):
 	def loop_select(self, loop_id, state):
 		if state:
 			for button in self.frm_loops.findChildren(QPushButton):
-				button.setChecked(False)
-			loop = self.looper.loop(loop_id)
+				if button.loop_id != loop_id:
+					button.setChecked(False)
+			loop = self.looper.loaded_loop(loop_id)
 			if loop is None:
 				loop = Loop(loop_id)
 				self.looper.add_loop(loop)
 			loop.active = True
 		else:
-			self.looper.loop(loop_id).active = False
+			self.looper.loaded_loop(loop_id).active = False
 
 	@pyqtSlot(bool)
 	def play_toggle(self, state):
@@ -291,20 +300,6 @@ class LooperTestWindow(QMainWindow):
 		else:
 			self.update_timer.stop()
 			self.looper.stop()
-
-	@pyqtSlot()
-	def shuffle(self):
-		with Pause(self.looper):
-			self.looper.clear()
-			try:
-				loop = Loop.random()
-			except IndexError:
-				DevilBox('Failed choosing a random loop')
-			else:
-				self.looper.add_loop(loop)
-				self.group_label.setText(loop.loop_group)
-				self.loop_label.setText(loop.name)
-				self.play_button.setEnabled(True)
 
 	@pyqtSlot(int)
 	def set_bpm(self, bpm):
