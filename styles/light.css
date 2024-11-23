@@ -10,16 +10,10 @@ QLabel {
 	background: transparent;
 }
 
-QComboBox,
 QLineEdit {
 	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E6E6E6, stop:.5 #F5F5F5, stop:1 #FCFCFC);
 	border: 1px solid #BFBFBF;
 	padding: 2px 4px;
-}
-
-QComboBox:on,
-QComboBox:on::drop-down {
-	background: #EEE;
 }
 
 QPushButton {
@@ -66,8 +60,19 @@ DrumWidget QPushButton:checked {
 	background-color: #E6E6FA;
 }
 
+DrumWidget TitleFrame {
+	background-color: #F7F7FF;
+}
+
+DrumWidget TitleFrame QLabel {
+}
+
 DrumWidget GroupFrame {
-	border: 1px solid #C8C8C8;
+	background-color: #D7D9D8;
+}
+
+DrumWidget QPushButton {
+	font-family: 'Ubuntu', 'Liberation Sans', 'Bitstream Vera Sans', sans-serif;
 }
 
 DrumWidget GroupButton {
@@ -76,7 +81,7 @@ DrumWidget GroupButton {
 }
 
 DrumWidget InstrumentButton {
-	font-size: 8.5pt;
+	font-size: 8pt;
 }
 
 

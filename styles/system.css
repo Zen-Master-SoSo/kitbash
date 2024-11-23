@@ -6,8 +6,10 @@ DrumWidget QLabel {
 	margin-left: 8px;
 }
 
+DrumWidget TitleFrame {
+}
+
 DrumWidget GroupFrame {
-	border: 1px solid #C8C8C8;
 }
 
 DrumWidget GroupButton {

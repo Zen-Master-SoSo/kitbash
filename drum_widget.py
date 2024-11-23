@@ -24,20 +24,24 @@ class DrumWidget(QFrame):
 	sig_group_select = pyqtSignal(str, str, bool, bool)
 	sig_inst_select = pyqtSignal(str, str, bool, bool)
 
-	def __init__(self, drumkit):
-		super().__init__()
+	def __init__(self, drumkit, parent):
+		super().__init__(parent)
 		self.drumkit = drumkit
 		self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
-		self.setFrameStyle(QFrame.Panel | QFrame.Raised)
+		self.setFrameStyle(QFrame.Panel)
+		self.setFrameShadow(QFrame.Sunken)
 		self.setObjectName('drum_widget')
 
 		main_layout = QVBoxLayout()
 		main_layout.setContentsMargins(2,2,2,2)
-		main_layout.setSpacing(2)
+		main_layout.setSpacing(0)
+
+		frm_title = TitleFrame()
+		frm_title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
 		top_layout = QHBoxLayout()
 		top_layout.setContentsMargins(2,2,2,2)
-		top_layout.setSpacing(2)
+		top_layout.setSpacing(0)
 
 		my_dir = os.path.dirname(__file__)
 		self.icon_expanded = QIcon(os.path.join(my_dir, 'res', 'group_expanded.svg'))
@@ -46,15 +50,15 @@ class DrumWidget(QFrame):
 		self.hide_button = QPushButton(self)
 		self.hide_button.setIcon(self.icon_expanded)
 		self.hide_button.setIconSize(QSize(16,16))
-		self.hide_button.setFixedWidth(24)
-		self.hide_button.setFixedHeight(24)
+		self.hide_button.setFixedWidth(20)
+		self.hide_button.setFixedHeight(20)
 		self.hide_button.setCheckable(True)
 		self.hide_button.toggled.connect(self.hide)
 		top_layout.addWidget(self.hide_button)
 
 		self.lbl_use_count = QLabel(self)
 		self.lbl_use_count.setText('(0)')
-		self.lbl_use_count.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
+		self.lbl_use_count.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 		top_layout.addWidget(self.lbl_use_count)
 
 		label = QLabel(self)
@@ -62,22 +66,23 @@ class DrumWidget(QFrame):
 		top_layout.addWidget(label)
 
 		top_layout.addStretch(20)
-		main_layout.addItem(top_layout)
+		frm_title.setLayout(top_layout)
+
+		main_layout.addWidget(frm_title)
 
 		self.frm_groups = QFrame(self)
 		self.groups = QHBoxLayout()
 		self.groups.setContentsMargins(2,2,2,2)
-		self.groups.setSpacing(2)
+		self.groups.setSpacing(0)
 		for group in self.drumkit.percussion_groups:
 			if group.empty():
 				continue
 			group_frame = GroupFrame()
 			group_frame.setFrameShape(QFrame.NoFrame)
-			group_frame.setMidLineWidth(2)
 			group_frame.setObjectName(group.group_id)	# GroupFrame identified by group_id
 			group_layout = QVBoxLayout()
 			group_layout.setSpacing(0)
-			group_layout.setContentsMargins(0,0,0,0)
+			group_layout.setContentsMargins(1,1,1,1)
 			group_button = GroupButton(group_frame)		# GroupButton has no unique object name
 			group_button.setText(group.name)
 			group_button.setCheckable(True)
@@ -119,7 +124,7 @@ class DrumWidget(QFrame):
 		if state:
 			self.initial_height = self.height()
 			self.frm_groups.hide()
-			self.setFixedHeight(34)
+			self.setFixedHeight(30)
 			self.hide_button.setIcon(self.icon_hidden)
 		else:
 			self.frm_groups.show()
@@ -156,6 +161,18 @@ class DrumWidget(QFrame):
 			button.setEnabled(True)
 		self.update_count()
 
+	def saved_selections(self):
+		"""
+		Must return list of which instruments are selected (checked)
+		"""
+		raise NotImplemented()
+
+	def restore_saved_selections(self, selections):
+		raise NotImplemented()
+
+
+class TitleFrame(QFrame):
+	pass
 
 class GroupFrame(QFrame):
 	pass

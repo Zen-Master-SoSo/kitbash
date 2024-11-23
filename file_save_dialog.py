@@ -8,9 +8,7 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtWidgets import QWidget
-from PyQt5.QtWidgets import QFrame
 from PyQt5.QtWidgets import QVBoxLayout
-from PyQt5.QtWidgets import QHBoxLayout
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QShortcut
 from PyQt5.QtWidgets import QGroupBox

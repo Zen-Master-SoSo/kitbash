@@ -18,118 +18,41 @@
     <normaloff>musecbox-icon.png</normaloff>musecbox-icon.png</iconset>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="verticalLayout" stretch="0,0,0">
+   <layout class="QVBoxLayout" name="verticalLayout" stretch="0,10,0">
     <property name="spacing">
-     <number>4</number>
+     <number>2</number>
     </property>
     <property name="leftMargin">
-     <number>6</number>
+     <number>2</number>
     </property>
     <property name="topMargin">
-     <number>5</number>
+     <number>2</number>
     </property>
     <property name="rightMargin">
-     <number>6</number>
+     <number>2</number>
     </property>
     <property name="bottomMargin">
-     <number>5</number>
+     <number>2</number>
     </property>
     <item>
-     <widget class="QFrame" name="frm_preview">
-      <property name="minimumSize">
-       <size>
-        <width>0</width>
-        <height>31</height>
-       </size>
-      </property>
+     <widget class="QFrame" name="frm_looper">
       <property name="frameShape">
-       <enum>QFrame::NoFrame</enum>
+       <enum>QFrame::Panel</enum>
       </property>
       <property name="frameShadow">
-       <enum>QFrame::Raised</enum>
+       <enum>QFrame::Sunken</enum>
       </property>
-      <layout class="QHBoxLayout" name="horizontalLayout_3">
-       <property name="spacing">
-        <number>7</number>
-       </property>
-       <property name="leftMargin">
-        <number>8</number>
-       </property>
-       <property name="topMargin">
-        <number>1</number>
-       </property>
-       <property name="rightMargin">
-        <number>8</number>
-       </property>
-       <property name="bottomMargin">
-        <number>1</number>
-       </property>
-       <item>
-        <widget class="QLabel" name="label">
-         <property name="text">
-          <string>Preview</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="hzlo1">
-         <item>
-          <widget class="QLabel" name="label_2">
-           <property name="text">
-            <string>BPM:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QSpinBox" name="spn_bpm">
-           <property name="minimum">
-            <number>30</number>
-           </property>
-           <property name="maximum">
-            <number>380</number>
-           </property>
-           <property name="value">
-            <number>120</number>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="hzlo2">
-         <item>
-          <widget class="QLabel" name="label_3">
-           <property name="text">
-            <string>Style:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QComboBox" name="cmb_loop_style"/>
-         </item>
-        </layout>
-       </item>
-       <item>
-        <widget class="QFrame" name="frm_loops">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="frameShape">
-          <enum>QFrame::StyledPanel</enum>
-         </property>
-         <property name="frameShadow">
-          <enum>QFrame::Raised</enum>
-         </property>
-        </widget>
-       </item>
-      </layout>
+      <layout class="QHBoxLayout" name="looper_layout"/>
      </widget>
     </item>
     <item>
      <widget class="QScrollArea" name="drums_scroller">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
       <property name="frameShape">
        <enum>QFrame::NoFrame</enum>
       </property>
@@ -141,8 +64,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>970</width>
-         <height>679</height>
+         <width>978</width>
+         <height>700</height>
         </rect>
        </property>
       </widget>
@@ -209,15 +132,24 @@
     <property name="title">
      <string>&amp;File</string>
     </property>
-    <widget class="QMenu" name="menuOpen_Recent">
+    <widget class="QMenu" name="menu_RecentProject">
      <property name="title">
-      <string>&amp;Recent SFZs ...</string>
+      <string>Recent &amp;Projects ...</string>
      </property>
     </widget>
-    <addaction name="action_New"/>
-    <addaction name="action_Open"/>
-    <addaction name="menuOpen_Recent"/>
-    <addaction name="action_Save"/>
+    <widget class="QMenu" name="menu_RecentDrumkits">
+     <property name="title">
+      <string>Recent &amp;Drumkits</string>
+     </property>
+    </widget>
+    <addaction name="action_NewProject"/>
+    <addaction name="action_OpenProject"/>
+    <addaction name="menu_RecentProject"/>
+    <addaction name="action_SaveProject"/>
+    <addaction name="separator"/>
+    <addaction name="action_LoadKit"/>
+    <addaction name="menu_RecentDrumkits"/>
+    <addaction name="separator"/>
     <addaction name="action_Quit"/>
    </widget>
    <widget class="QMenu" name="menu_View">
@@ -229,7 +161,9 @@
       <string>St&amp;yle</string>
      </property>
     </widget>
+    <addaction name="action_Looper"/>
     <addaction name="action_Statusbar"/>
+    <addaction name="action_CollapseKits"/>
     <addaction name="separator"/>
     <addaction name="menu_Style"/>
     <addaction name="action_ReloadStyle"/>
@@ -237,9 +171,12 @@
    <addaction name="menu_File"/>
    <addaction name="menu_View"/>
   </widget>
-  <action name="action_Open">
+  <action name="action_LoadKit">
    <property name="text">
-    <string>&amp;Open SFZ ...</string>
+    <string>Load SFZ Drum&amp;Kit</string>
+   </property>
+   <property name="toolTip">
+    <string>Load an SFZ drumkit</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+O</string>
@@ -250,7 +187,7 @@
     <string>&amp;Quit</string>
    </property>
    <property name="toolTip">
-    <string>Shutdown Carla engine and quit</string>
+    <string>Quit after being prompted to save changes</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+Q</string>
@@ -270,15 +207,7 @@
     <string>Show/hide the status bar</string>
    </property>
   </action>
-  <action name="action_Recent">
-   <property name="text">
-    <string>&amp;Recent</string>
-   </property>
-   <property name="toolTip">
-    <string>Recent files</string>
-   </property>
-  </action>
-  <action name="action_New">
+  <action name="action_NewProject">
    <property name="text">
     <string>&amp;New</string>
    </property>
@@ -289,9 +218,9 @@
     <string>Ctrl+N</string>
    </property>
   </action>
-  <action name="action_Save">
+  <action name="action_SaveProject">
    <property name="text">
-    <string>&amp;Save</string>
+    <string>&amp;Save project</string>
    </property>
    <property name="toolTip">
     <string>Save the current project</string>
@@ -311,20 +240,31 @@
     <string>F5</string>
    </property>
   </action>
-  <action name="action_ClearTrackPlugins">
+  <action name="action_Looper">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
    <property name="text">
-    <string>Clear all track plugins</string>
+    <string>&amp;Looper</string>
    </property>
    <property name="toolTip">
-    <string>Remove all plugins in all track tracks</string>
+    <string>Show/hide the looper bar</string>
    </property>
   </action>
-  <action name="action_AddTrack">
+  <action name="action_CollapseKits">
    <property name="text">
-    <string>Add &amp;SFZ Source</string>
+    <string>Collapse &amp;Kits</string>
    </property>
    <property name="toolTip">
-    <string>Add a track widget</string>
+    <string>Collapse all drumkit widgets</string>
+   </property>
+  </action>
+  <action name="action_OpenProject">
+   <property name="text">
+    <string>&amp;Open project</string>
+   </property>
+   <property name="toolTip">
+    <string>Open a kitbash project</string>
    </property>
   </action>
  </widget>

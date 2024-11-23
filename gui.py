@@ -18,11 +18,11 @@ from PyQt5 import uic
 from PyQt5.QtCore import	Qt, pyqtSignal, pyqtSlot, QObject, QPoint, QTimer, QEvent, QSettings, QThreadPool, QRunnable
 from PyQt5.QtGui import		QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog, QInputDialog, \
-							QAction, QActionGroup, QMenu, QSpacerItem
+							QAction, QActionGroup, QMenu, QSpacerItem, QSizePolicy
 
 from kitbash.drumkit import Drumkit
 from kitbash.drum_widget import DrumWidget
-
+from kitbash.looper_widget import LooperWidget
 
 APPLICATION_NAME = "kitbash"
 FILES_TYPE = "SFZ (*.sfz)"
@@ -43,55 +43,68 @@ class MainWindow(QMainWindow):
 		my_dir = os.path.dirname(__file__)
 		with ShutUpQT():
 			uic.loadUi(os.path.join(my_dir, 'res', 'main_window.ui'), self)
-		self.setWindowIcon(QIcon(os.path.join(my_dir, 'res', 'icon-90.png')))
+		#self.setWindowIcon(QIcon(os.path.join(my_dir, 'res', 'icon.png')))
 		self.settings = QSettings("ZenSoSo", APPLICATION_NAME)
 		geometry = self.settings.value("geometry")
 		if geometry is not None:
 			self.restoreGeometry(geometry)
+		self.recent_projects = RecentItemsList(self.settings.value("recent_projects", defaultValue=[]))
+		self.recent_drumkits = RecentItemsList(self.settings.value("recent_drumkits", defaultValue=[]))
 
-		self.drum_widgets = VListLayout(end_space = 8)
+		self.looper_widget = LooperWidget(self)
+		self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+		self.frm_looper.layout().addWidget(self.looper_widget)
+
+		self.drum_widgets = VListLayout(end_space = 10)
 		self.drum_widgets.setContentsMargins(0,0,0,0)
-		self.drum_widgets.setSpacing(0)
+		self.drum_widgets.setSpacing(2)
 		self.drums_scroll_contents.setLayout(self.drum_widgets)
 		self.threadpool = QThreadPool()
 		self.threadpool.setMaxThreadCount(1)
 
-		self._recent_files = RecentItemsList(self.settings.value("recent_files", defaultValue=[]))
 		self.fill_style_menu()
 		self.load_current_style()
 		self.show_hide_window_elements()
 		self.connect_actions()
 		signal(SIGINT, self.system_signal)
 		signal(SIGTERM, self.system_signal)
+
 		CarlaQt(APPLICATION_NAME)
 		self.connect_host_callbacks()
 		self.update_timer = QTimer()
 		self.update_timer.setInterval(int(1 / 4 * 1000))
 		self.update_timer.timeout.connect(self.slot_timer_timeout)
+
+		self.project_file = None
+		self.project_definition = None
+
 		QTimer.singleShot(0, self.layout_complete)
 
 	# -----------------------------------------------------------------
 	# Setup functions:
 
 	def show_hide_window_elements(self):
-		show_toolbar = int(self.settings.value("show_toolbar", 1)) == 1
+		show_looper = int(self.settings.value("show_looper", 1)) == 1
+		show_looper = int(self.settings.value("show_looper", 1)) == 1
 		show_statusbar = int(self.settings.value("show_statusbar", 1)) == 1
-		#self.frm_toolbar.setVisible(show_toolbar)
+		self.frm_looper.setVisible(show_looper)
 		self.frm_statusbar.setVisible(show_statusbar)
-		#self.action_Toolbar.setChecked(show_toolbar)
+		self.action_Looper.setChecked(show_looper)
 		self.action_Statusbar.setChecked(show_statusbar)
-		#self.action_Toolbar.toggled.connect(self.show_toolbar)
+		self.action_Looper.toggled.connect(self.show_looper)
 		self.action_Statusbar.toggled.connect(self.show_statusbar)
+		self.action_CollapseKits.triggered.connect(self.action_collapse_kits)
+		self.action_CollapseKits.setChecked(False)
 
 	def connect_actions(self):
 		# Menu actions
-		self.action_New.triggered.connect(self.action_new)
-		self.action_Open.triggered.connect(self.action_open_file)
-		self.action_Save.triggered.connect(self.action_save)
+		self.action_NewProject.triggered.connect(self.action_new_project)
+		self.action_OpenProject.triggered.connect(self.action_open_project)
+		self.action_SaveProject.triggered.connect(self.action_save_project)
+		self.action_LoadKit.triggered.connect(self.action_load_kit)
 		self.action_ReloadStyle.triggered.connect(self.load_current_style)
-		# Pushbutton events
-		#self.b_xruns.clicked.connect(self.slot_clear_xruns)
-		#QApplication.instance().installEventFilter(self)
+		self.menu_RecentProject.aboutToShow.connect(self.action_show_recent_projects)
+		self.menu_RecentDrumkits.aboutToShow.connect(self.action_show_recent_drumkits)
 
 	def connect_host_callbacks(self):
 		carla = CarlaQt.instance
@@ -113,20 +126,7 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def layout_complete(self):
-		import random
-		for sfz_filename in random.sample(glob.glob('/home/liyang/docs/sfz/Drumsets/**/*.sfz', recursive=True), 4):
-			#logging.debug('Starting worker to load ' + sfz_filename)
-			worker = KitLoader(sfz_filename)
-			worker.signals.sig_complete.connect(self.slot_drumkit_loaded)
-			self.threadpool.start(worker)
-
-	@pyqtSlot(Drumkit)
-	def slot_drumkit_loaded(self, drumkit):
-		#logging.debug('Finished loading ' + drumkit.name)
-		widget = DrumWidget(drumkit)
-		self.drum_widgets.append(widget)
-		widget.sig_group_select.connect(self.slot_group_select)
-		widget.sig_inst_select.connect(self.slot_inst_select)
+		pass
 
 	@pyqtSlot(str, str, bool, bool)
 	def slot_group_select(self, kitname, group_id, state, ctrl_state):
@@ -182,33 +182,73 @@ class MainWindow(QMainWindow):
 	# -----------------------------------------------------------------
 	# Project loading / saving:
 
-	@pyqtSlot()
-	def action_show_recent(self):
-		"""
-		Fills "recent files" menu before expanding
-		Setup thusly:
-			self.menuOpen_Recent.aboutToShow.connect(self.action_show_recent)
-		"""
-		self.menuOpen_Recent.clear()
-		actions = []
-		for filename in RECENT_FILES:
-			action = QAction(filename, self)
-			action.triggered.connect(partial(self.load_project, filename))
-			actions.append(action)
-		self.menuOpen_Recent.addActions(actions)
-
 	def compile_sfz_parts(self):
 		raise NotImplemented()
 
 	def load_project(self, filename):
-		logging.debug("LOADING PROJECT " + filename)
-		self.project_file = filename
-		self.set_dirty(False)
-		if self.is_clear():
-			self.cleared_to_load()
+		if os.path.exists(filename):
+			logging.debug("LOADING PROJECT " + filename)
+			self.project_file = filename
+			if self.is_clear():
+				self.execute_project_load()
+			else:
+				MainWindow.project_clearing = True
+				self.clear()
 		else:
-			MainWindow.project_clearing = True
-			self.clear()
+			self.recent_projects.remove(filename)
+			self.settings.setValue("recent_projects", self.recent_projects.items)
+			DevilBox(f"Project not found: {filename}")
+
+	def is_clear(self):
+		return len(self.drum_widgets) == 0
+
+	def clear(self):
+		logging.debug("CLEARING")
+		for widget in reversed(self.drum_widgets):
+			widget.remove()
+
+	def execute_project_load(self):
+		MainWindow.project_loading = True
+		self.set_dirty(False)
+		try:
+			with open(self.project_file, 'r') as fh:
+				self.project_definition = json.load(fh)
+		except json.JSONDecodeError as e:
+			DevilBox('There was a problem decoding "{0}"' + \
+				'\nAre you sure it is a kitbash project?'.format(self.project_file))
+		else:
+			self.recent_projects.select(self.project_file)
+			self.settings.setValue("recent_project_folder", os.path.dirname(self.project_file))
+			self.settings.setValue("recent_projects", self.recent_projects.items)
+			for drumkit in self.project_definition:
+				self.load_drumkit(drumkit.sfz_filename)
+		MainWindow.project_loading = False
+		MainWindow.project_clearing = False
+
+	def load_drumkit(self, filename):
+		if os.path.exists(filename):
+			worker = KitLoader(filename)
+			worker.signals.sig_complete.connect(self.drumkit_loaded)
+			self.threadpool.start(worker)
+			self.recent_drumkits.select(filename)
+			self.settings.setValue("recent_drumkit_folder", os.path.dirname(filename))
+		else:
+			self.recent_drumkits.remove(filename)
+			DevilBox(f"File not found: {filename}")
+		self.settings.setValue("recent_drumkits", self.recent_drumkits.items)
+
+	@pyqtSlot(Drumkit)
+	def drumkit_loaded(self, drumkit):
+		# TODO: Load DrumWidget "empty", and when kit is loaded, fill with groups/instruments
+		widget = DrumWidget(drumkit, self)
+		self.drum_widgets.append(widget)
+		widget.sig_group_select.connect(self.slot_group_select)
+		widget.sig_inst_select.connect(self.slot_inst_select)
+		if self.project_definition:
+			for kitdef in self.project_definition:
+				if kitdef.name == drumkit.name:
+					widget.restore_saved_selections(kitdef.saved_selections)
+					break
 
 	def set_dirty(self, state=True):
 		self._dirty = state
@@ -226,28 +266,6 @@ class MainWindow(QMainWindow):
 			self
 		)
 		return dlg.exec() == QMessageBox.Ok
-
-	def clear(self):
-		logging.debug("CLEARING")
-		for widget in reversed(self.drum_widgets):
-			widget.remove()
-
-	def cleared_to_load(self):
-		MainWindow.project_loading = True
-		try:
-			dlg = ProjectLoadDialog(self, self.project_file)
-		except json.JSONDecodeError as e:
-			DevilBox('There was a problem decoding "{0}"'.format(self.project_file))
-		else:
-			if dlg.exec():
-				self.project_file = self.project_file
-				RECENT_FILES.select(self.project_file)
-				self.settings.setValue("recent_project_folder", os.path.dirname(self.project_file))
-				self.settings.setValue("RECENT_FILES", RECENT_FILES.items)
-				self.setup_after_load()
-				self.set_dirty(False)
-		MainWindow.project_loading = False
-		MainWindow.project_clearing = False
 
 	def setup_after_load(self):
 		# Called after loading a saved project:
@@ -280,41 +298,71 @@ class MainWindow(QMainWindow):
 	# UI handling slots:
 
 	@pyqtSlot(bool)
-	def show_toolbar(self, state):
-		self.frm_toolbar.setVisible(state)
-		self.settings.setValue('show_toolbar', int(state))
+	def show_looper(self, state):
+		self.frm_looper.setVisible(state)
+		self.settings.setValue('show_looper', int(state))
 
 	@pyqtSlot(bool)
 	def show_statusbar(self, state):
 		self.frm_statusbar.setVisible(state)
-		SETTINGS.setValue('show_statusbar', int(state))
+		self.settings.setValue('show_statusbar', int(state))
 
-	@pyqtSlot(bool)
-	def action_new(self, checked):
+	@pyqtSlot()
+	def action_collapse_kits(self):
+		for widget in self.drum_widgets:
+			widget.hide_button.setChecked(True)
+
+	@pyqtSlot()
+	def action_show_recent_drumkits(self):
+		"""
+		Fills "recent_drumkits" menu before expanding
+		"""
+		self.menu_RecentDrumkits.clear()
+		actions = []
+		for filename in self.recent_drumkits:
+			action = QAction(filename, self)
+			action.triggered.connect(partial(self.load_drumkit, filename))
+			actions.append(action)
+		self.menu_RecentDrumkits.addActions(actions)
+
+	@pyqtSlot()
+	def action_show_recent_projects(self):
+		"""
+		Fills "recent_projects" menu before expanding
+		"""
+		self.menu_RecentProject.clear()
+		actions = []
+		for filename in self.recent_projects:
+			action = QAction(filename, self)
+			action.triggered.connect(partial(self.load_project, filename))
+			actions.append(action)
+		self.menu_RecentProject.addActions(actions)
+
+	@pyqtSlot()
+	def action_new_project(self):
 		if self.permission_to_clear():
 			self.clear()
 
-	@pyqtSlot(bool)
-	def action_open_file(self, checked):
+	@pyqtSlot()
+	def action_open_project(self):
 		if not self.permission_to_clear():
 			return
 		filename = QFileDialog.getOpenFileName(self,
 			"Open saved project",
 			self.settings.value("recent_project_folder", ""),
-			FILES_TYPE
+			"Kitbash project (*.json)"
 		)[0]
 		if filename != "":
 			self.load_project(filename)
-			self.project_file = filename
 
-	@pyqtSlot(bool)
-	def action_save(self, checked):
+	@pyqtSlot()
+	def action_save_project(self):
 		if self.project_file is None:
 			filename, _ = QFileDialog.getSaveFileName(
 				self,
-				"Save SFZ ...",
-				"kitbash.sfz",
-				FILES_TYPE
+				"Save Kitbash project ...",
+				"kitbash.json",
+				"Kitbash project (*.json)"
 			)
 			if filename:
 				self.project_file = filename
@@ -323,6 +371,16 @@ class MainWindow(QMainWindow):
 		with open(self.project_file, 'w') as fh:
 			json.dump(self.compile_sfz_parts(), fh, indent="\t")
 			self.set_dirty(False)
+
+	@pyqtSlot()
+	def action_load_kit(self):
+		filename = QFileDialog.getOpenFileName(self,
+			"Load SFZ Drumkit",
+			self.settings.value("recent_sfz_folder", ""),
+			"SFZ file (*.sfz)"
+		)[0]
+		if filename != "":
+			self.load_drumkit(filename)
 
 	# -----------------------------------------------------------------
 	# Carla management:

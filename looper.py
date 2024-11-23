@@ -6,9 +6,8 @@ import logging
 import numpy as np
 from math import ceil
 from jack import Client, JackError, CallbackExit
-from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QMainWindow
-from kitbash.loops import Loop, Loops, EVENT_STRUCT
+from kitbash.loops import Loop
 
 DEFAULT_BEATS_PER_MINUTE = 120
 
@@ -99,15 +98,20 @@ class Looper:
 		return []
 
 	def remeasure(self):
-		last_beat = max([loop.last_beat for loop in self.loops])
-		self.end_beat = float(ceil(last_beat / self.beats_per_measure) * self.beats_per_measure)
-		if self.beat > self.end_beat:
+		if self.loops:
+			last_beat = max([loop.last_beat for loop in self.loops])
+			self.end_beat = float(ceil(last_beat / self.beats_per_measure) * self.beats_per_measure)
+			if self.beat > self.end_beat:
+				self.beat = 0.0
+		else:
 			self.beat = 0.0
+			self.end_beat = 0.0
 
 	def _loaded_loop(self, loop_id):
 		for loop in self.loops:
 			if loop.loop_id == loop_id:
 				return loop
+		return None
 
 	def loaded_loop_ids(self):
 		return [loop.loop_id for loop in self.loops]
@@ -187,7 +191,7 @@ class Looper:
 		The callback argument is the delay in microseconds due to the most recent XRUN
 		occurrence. The callback is supposed to raise CallbackExit on error.
 		"""
-		logging.debug('xrun: delayed %.2f microseconds' % delayed_usecs)
+		logging.debug(f'xrun: delayed {delayed_usecs:.2f} microseconds')
 		pass
 
 
@@ -216,133 +220,19 @@ class FakePort:
 
 class LooperTestWindow(QMainWindow):
 
-	single_loop	= False # Set True to play one loop at a time
-	COLUMNS = 4
-
-	def __init__(self, options):
+	def __init__(self):
 		super().__init__()
-		self._options = options
+		from kitbash.looper_widget import LooperWidget
+		from PyQt5.QtWidgets import QShortcut
+		from PyQt5.QtGui import QKeySequence
 		self.setWindowTitle('Looper')
-
-		window_frame = QFrame()
-		main_layout = QVBoxLayout()
-
-		group_layout = QHBoxLayout()
-		group_layout.setSpacing(6)
-		lbl = QLabel('Group:')
-		lbl.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
-		group_layout.addWidget(lbl)
-		self.cmb_group = QComboBox(self)
-		self.cmb_group.addItem('')
-		self.cmb_group.addItems(Loops.groups())
-		self.cmb_group.currentTextChanged.connect(self.group_changed)
-		group_layout.addWidget(self.cmb_group)
-		main_layout.addItem(group_layout)
-
-		self.frm_loops = QFrame()
-		loops_layout = QGridLayout()
-		loops_layout.setContentsMargins(2,2,2,2)
-		loops_layout.setSpacing(2)
-		self.frm_loops.setLayout(loops_layout)
-		main_layout.addWidget(self.frm_loops)
-
-		beat_layout = QHBoxLayout()
-		beat_layout.addSpacing(10)
-
-		lbl = QLabel('BPM:')
-		lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-		beat_layout.addWidget(lbl)
-
-		self.beat_spinner = QSpinBox(self)
-		self.beat_spinner.setMinimum(30)
-		self.beat_spinner.setMaximum(280)
-		self.beat_spinner.setValue(DEFAULT_BEATS_PER_MINUTE)
-		self.beat_spinner.valueChanged.connect(self.set_bpm)
-		self.beat_spinner.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-		beat_layout.addWidget(self.beat_spinner)
-
-		self.beat_label = QLabel('0')
-		font = self.beat_label.font()
-		font.setPixelSize(32)
-		self.beat_label.setFont(font)
-		self.beat_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-		beat_layout.addWidget(self.beat_label)
-
-		beat_layout.addSpacing(10)
-		main_layout.addItem(beat_layout)
-
-		self.play_button = QPushButton(self)
-		self.play_button.setText('PLAY')
-		self.play_button.setCheckable(True)
-		self.play_button.setEnabled(False)
-		self.play_button.toggled.connect(self.play_toggle)
-		font = self.play_button.font()
-		font.setPixelSize(22)
-		self.play_button.setFont(font)
-		main_layout.addWidget(self.play_button)
-
-		window_frame.setLayout(main_layout)
-		for label in window_frame.findChildren(QLabel):
-			label.setAlignment(Qt.AlignCenter)
-		self.setCentralWidget(window_frame)
-
+		self.looper_widget = LooperWidget(self)
+		self.setCentralWidget(self.looper_widget)
 		self.quit_shortcut = QShortcut(QKeySequence('Ctrl+Q'), self)
 		self.quit_shortcut.activated.connect(self.close)
 
-		self.looper = Looper()
-		self.update_timer = QTimer()
-		self.update_timer.setInterval(int(1 / 8 * 1000))
-		self.update_timer.timeout.connect(self.slot_timer_timeout)
-
-	@pyqtSlot()
-	def slot_timer_timeout(self):
-		self.beat_label.setText("%.1f" % (self.looper.beat + 1.0))
-
-	@pyqtSlot(str)
-	def group_changed(self, text):
-		self.looper.stop()
-		self.looper.clear()
-		for button in self.frm_loops.findChildren(QPushButton):
-			self.frm_loops.removeChild(button)
-			button.deleteLater()
-		if text == '':
-			self.play_button.setEnabled(False)
-			return
-		ord_ = 0
-		ids_to_load = Loops.group_loops(text)
-		self.looper.load_loops([tup[0] for tup in ids_to_load])
-		for tup in ids_to_load:
-			button = QPushButton(tup[1], self.frm_loops)
-			button.setCheckable(True)
-			button.loop_id = tup[0]
-			button.toggled.connect(partial(self.loop_select, tup[0]))
-			self.frm_loops.layout().addWidget(button, int(ord_ / self.COLUMNS), ord_ % self.COLUMNS)
-			ord_ += 1
-		self.play_button.setEnabled(True)
-
-	@pyqtSlot(int, bool)
-	def loop_select(self, loop_id, state):
-		if state and self.single_loop:
-			for button in self.frm_loops.findChildren(QPushButton):
-				if button.loop_id != loop_id:
-					button.setChecked(False)
-		self.looper.load_loop(loop_id).active = state
-
-	@pyqtSlot(bool)
-	def play_toggle(self, state):
-		if state:
-			self.update_timer.start()
-			self.looper.play()
-		else:
-			self.update_timer.stop()
-			self.looper.stop()
-
-	@pyqtSlot(int)
-	def set_bpm(self, bpm):
-		self.looper.bpm = bpm
-
 	def closeEvent(self, event):
-		self.looper.stop()
+		self.looper_widget.looper.stop()
 		event.accept()
 
 	def system_signal(self, sig, frame):
@@ -371,22 +261,8 @@ class Pause:
 
 
 if __name__ == "__main__":
-	import sys, os, json, glob, argparse
-	from functools import partial
-	from PyQt5.QtCore import Qt
-	from PyQt5.QtCore import QTimer
-	from PyQt5.QtGui import QKeySequence
+	import sys, os, argparse
 	from PyQt5.QtWidgets import QApplication
-	from PyQt5.QtWidgets import QShortcut
-	from PyQt5.QtWidgets import QLabel
-	from PyQt5.QtWidgets import QPushButton
-	from PyQt5.QtWidgets import QFrame
-	from PyQt5.QtWidgets import QComboBox
-	from PyQt5.QtWidgets import QSpinBox
-	from PyQt5.QtWidgets import QVBoxLayout
-	from PyQt5.QtWidgets import QHBoxLayout
-	from PyQt5.QtWidgets import QGridLayout
-	from PyQt5.QtWidgets import QSizePolicy
 	from qt_extras import DevilBox
 
 	p = argparse.ArgumentParser()
@@ -407,7 +283,7 @@ if __name__ == "__main__":
 		pass
 	app = QApplication([])
 	try:
-		main_window = LooperTestWindow(options)
+		main_window = LooperTestWindow()
 	except JackError:
 		DevilBox('Could not connect to JACK server. Is it running?')
 		sys.exit(1)
