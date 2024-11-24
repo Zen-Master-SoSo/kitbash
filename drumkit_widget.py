@@ -29,9 +29,11 @@ class DrumKitWIdget(QFrame):
 	def __init__(self, filename, parent):
 		super().__init__(parent)
 		self.filename = filename
-		self.synth = LiquidSFZ(self.filename)
-		self.synth.sig_Ready.connect(self.synth_ready)
-		self.synth.add_to_carla()
+		self.carla_enable = not parent.options.no_audio
+		if self.carla_enable:
+			self.synth = LiquidSFZ(self.filename)
+			self.synth.sig_Ready.connect(self.synth_ready)
+			self.synth.add_to_carla()
 
 		self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 		self.setFrameStyle(QFrame.Panel)
@@ -91,26 +93,13 @@ class DrumKitWIdget(QFrame):
 		for group in self.drumkit.percussion_groups:
 			if group.empty():
 				continue
-			group_frame = GroupFrame()
-			group_frame.setFrameShape(QFrame.NoFrame)
-			group_frame.setObjectName(group.group_id)	# GroupFrame identified by group_id
-			group_layout = QVBoxLayout()
-			group_layout.setSpacing(0)
-			group_layout.setContentsMargins(1,1,1,1)
-			group_button = GroupButton(group_frame)		# GroupButton has no unique object name
-			group_button.setText(group.name)
-			group_button.setCheckable(True)
-			group_button.clicked.connect(partial(self.group_select, group.group_id, group_button))
-			group_layout.addWidget(group_button)
+			group_frame = GroupFrame(group, self)
+			group_frame.group_button.clicked.connect(partial(self.group_select, group.group_id, group_frame.group_button))
 			for inst in group.instruments.values():
-				inst_button = InstrumentButton(group_frame)
-				inst_button.setText(inst.name)
-				inst_button.setCheckable(True)
-				inst_button.setObjectName(inst.inst_id)	# InstrumentButton identified by inst_id
+				inst_button = InstrumentButton(inst, group_frame)
 				inst_button.clicked.connect(partial(self.inst_select, inst.inst_id, inst_button))
-				group_layout.addWidget(inst_button)
-			group_layout.addStretch()
-			group_frame.setLayout(group_layout)
+				group_frame.group_layout.addWidget(inst_button)
+			group_frame.group_layout.addStretch()
 			self.groups.addWidget(group_frame)
 
 	@pyqtSlot(str, QPushButton)
@@ -118,7 +107,6 @@ class DrumKitWIdget(QFrame):
 		state = button.isChecked()
 		for button in button.parentWidget().findChildren(InstrumentButton):
 			button.setChecked(state)
-			button.setEnabled(not state)
 		self.sig_group_select.emit(self.drumkit.name, group_id, button.isChecked(), self.ctrl_pressed())
 		self.update_count()
 
@@ -164,11 +152,7 @@ class DrumKitWIdget(QFrame):
 		if button is None:
 			return logging.error('Could not find button ' + inst_id)
 		button.setChecked(False)
-		button.setEnabled(True)
-		group_frame = button.parentWidget()
-		group_frame.findChild(GroupButton).setChecked(False)
-		for button in group_frame.findChildren(QPushButton):
-			button.setEnabled(True)
+		button.parentWidget().findChild(GroupButton).setChecked(False)
 		self.update_count()
 
 	def saved_selections(self):
@@ -190,13 +174,28 @@ class TitleFrame(QFrame):
 	pass
 
 class GroupFrame(QFrame):
-	pass
+	def __init__(self, group, parent):
+		super().__init__(parent)
+		self.setFrameShape(QFrame.NoFrame)
+		self.setObjectName(group.group_id)	# GroupFrame identified by group_id
+		self.group_layout = QVBoxLayout()
+		self.group_layout.setSpacing(0)
+		self.group_layout.setContentsMargins(1,1,1,1)
+		self.setLayout(self.group_layout)
+		self.group_button = GroupButton(self)		# GroupButton has no unique object name
+		self.group_button.setText(group.name)
+		self.group_button.setCheckable(True)
+		self.group_layout.addWidget(self.group_button)
 
 class GroupButton(QPushButton):
 	pass
 
 class InstrumentButton(QPushButton):
-	pass
+	def __init__(self, inst, parent):
+		super().__init__(parent)
+		self.setText(inst.name)
+		self.setCheckable(True)
+		self.setObjectName(inst.inst_id)	# InstrumentButton identified by inst_id
 
 
 #  end kitbash/drumkit_widget.py

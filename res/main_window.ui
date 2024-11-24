@@ -179,7 +179,7 @@
     <string>Load an SFZ drumkit</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+O</string>
+    <string>Ctrl+K</string>
    </property>
   </action>
   <action name="action_Quit">
@@ -265,6 +265,9 @@
    </property>
    <property name="toolTip">
     <string>Open a kitbash project</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
    </property>
   </action>
  </widget>

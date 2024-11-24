@@ -39,7 +39,7 @@ class MainWindow(QMainWindow):
 
 	def __init__(self, options):
 		super().__init__()
-		self._options = options
+		self.options = options
 		my_dir = os.path.dirname(__file__)
 		with ShutUpQT():
 			uic.loadUi(os.path.join(my_dir, 'res', 'main_window.ui'), self)
@@ -51,9 +51,19 @@ class MainWindow(QMainWindow):
 		self.recent_projects = RecentItemsList(self.settings.value("recent_projects", defaultValue=[]))
 		self.recent_drumkits = RecentItemsList(self.settings.value("recent_drumkits", defaultValue=[]))
 
-		self.looper_widget = LooperWidget(self)
-		self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-		self.frm_looper.layout().addWidget(self.looper_widget)
+		if self.options.no_audio:
+			self.frm_looper = None
+
+		else:
+			self.looper_widget = LooperWidget(self)
+			self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+			self.frm_looper.layout().addWidget(self.looper_widget)
+
+			CarlaQt(APPLICATION_NAME)
+			self.connect_host_callbacks()
+			self.update_timer = QTimer()
+			self.update_timer.setInterval(int(1 / 4 * 1000))
+			self.update_timer.timeout.connect(self.slot_timer_timeout)
 
 		self.drumkit_widgets = VListLayout(end_space = 10)
 		self.drumkit_widgets.setContentsMargins(0,0,0,0)
@@ -69,12 +79,6 @@ class MainWindow(QMainWindow):
 		signal(SIGINT, self.system_signal)
 		signal(SIGTERM, self.system_signal)
 
-		CarlaQt(APPLICATION_NAME)
-		self.connect_host_callbacks()
-		self.update_timer = QTimer()
-		self.update_timer.setInterval(int(1 / 4 * 1000))
-		self.update_timer.timeout.connect(self.slot_timer_timeout)
-
 		self.project_file = None
 		self.project_definition = None
 		self.project_loading = False
@@ -88,13 +92,17 @@ class MainWindow(QMainWindow):
 		show_looper = int(self.settings.value("show_looper", 1)) == 1
 		show_looper = int(self.settings.value("show_looper", 1)) == 1
 		show_statusbar = int(self.settings.value("show_statusbar", 1)) == 1
-		self.frm_looper.setVisible(show_looper)
+		if self.frm_looper:
+			self.frm_looper.setVisible(show_looper)
+			self.action_Looper.setChecked(show_looper)
+			self.action_Looper.toggled.connect(self.show_looper)
+		else:
+			self.action_Looper.setEnabled(False)
 		self.frm_statusbar.setVisible(show_statusbar)
-		self.action_Looper.setChecked(show_looper)
 		self.action_Statusbar.setChecked(show_statusbar)
-		self.action_Looper.toggled.connect(self.show_looper)
 		self.action_Statusbar.toggled.connect(self.show_statusbar)
 		self.action_CollapseKits.triggered.connect(self.action_collapse_kits)
+		self.action_CollapseKits.setEnabled(False)
 		self.action_CollapseKits.setChecked(False)
 
 	def connect_actions(self):
@@ -127,7 +135,8 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def layout_complete(self):
-		self.start_carla_engine()
+		if not self.options.no_audio:
+			self.start_carla_engine()
 
 	@pyqtSlot(str, str, bool, bool)
 	def slot_group_select(self, kitname, group_id, state, ctrl_state):
@@ -186,6 +195,11 @@ class MainWindow(QMainWindow):
 	def compile_sfz_parts(self):
 		raise NotImplemented()
 
+	def set_dirty(self, state=True):
+		self._dirty = state
+		title = APPLICATION_NAME if self.project_file is None else f"{self.project_file} [{APPLICATION_NAME}]"
+		self.setWindowTitle("* " + title if self._dirty else title)
+
 	def load_project(self, filename):
 		if os.path.exists(filename):
 			logging.debug("LOADING PROJECT " + filename)
@@ -202,6 +216,18 @@ class MainWindow(QMainWindow):
 
 	def is_clear(self):
 		return len(self.drumkit_widgets) == 0
+
+	def permission_to_clear(self):
+		if self.is_clear():
+			return True
+		dlg = QMessageBox(
+			QMessageBox.Warning,
+			"Verify clear all",
+			"Are you sure you want to remove all existing plugins?",
+			QMessageBox.Ok | QMessageBox.Cancel,
+			self
+		)
+		return dlg.exec() == QMessageBox.Ok
 
 	def clear(self):
 		logging.debug("CLEARING")
@@ -225,6 +251,10 @@ class MainWindow(QMainWindow):
 			for drumkit in self.project_definition:
 				self.load_drumkit(drumkit.sfz_filename)
 
+	def setup_after_load(self):
+		# Called after loading a saved project:
+		pass
+
 	def load_drumkit(self, filename):
 		if os.path.exists(filename):
 			widget = DrumKitWIdget(filename, self)
@@ -247,6 +277,7 @@ class MainWindow(QMainWindow):
 			if self.project_loading and drumkit.filename in self.project_definition \
 			else None
 		self.drumkit_widget(drumkit.filename).drumkit_loaded(drumkit, saved_selections)
+		self.action_CollapseKits.setEnabled(True)
 		if self.project_loading:
 			for widget in self.drumkit_widgets:
 				if widget.drumkit is None:
@@ -258,27 +289,6 @@ class MainWindow(QMainWindow):
 			if widget.filename == filename:
 				return widget
 
-	def set_dirty(self, state=True):
-		self._dirty = state
-		title = APPLICATION_NAME if self.project_file is None else f"{self.project_file} [{APPLICATION_NAME}]"
-		self.setWindowTitle("* " + title if self._dirty else title)
-
-	def permission_to_clear(self):
-		if self.is_clear():
-			return True
-		dlg = QMessageBox(
-			QMessageBox.Warning,
-			"Verify clear all",
-			"Are you sure you want to remove all existing plugins?",
-			QMessageBox.Ok | QMessageBox.Cancel,
-			self
-		)
-		return dlg.exec() == QMessageBox.Ok
-
-	def setup_after_load(self):
-		# Called after loading a saved project:
-		pass
-
 	# -----------------------------------------------------------------
 	# QMainWindow overloads (see also: "timerEvent")
 
@@ -289,7 +299,8 @@ class MainWindow(QMainWindow):
 
 	def closeEvent(self, event):
 		logging.debug('MainWindow close()')
-		CarlaQt.instance.delete()
+		if not self.options.no_audio:
+			CarlaQt.instance.delete()
 		self.settings.setValue("geometry", self.saveGeometry())
 		self.save_geometry()
 		self.settings.sync()
@@ -384,7 +395,7 @@ class MainWindow(QMainWindow):
 	def action_load_kit(self):
 		filename = QFileDialog.getOpenFileName(self,
 			"Load SFZ Drumkit",
-			self.settings.value("recent_sfz_folder", ""),
+			self.settings.value("recent_drumkit_folder", ""),
 			"SFZ file (*.sfz)"
 		)[0]
 		if filename != "":
@@ -537,6 +548,7 @@ def main():
 	Write your help text!
 	"""
 	p.add_argument('Filename', type=str, nargs='*', help='SFZ file[s] to include at startup')
+	p.add_argument("--no-audio", "-q", action="store_true", help="Do not load Carla and Jack drivers")
 	p.add_argument("--log-file", "-l", type=str, help="Log to this file")
 	p.add_argument("--verbose", "-v", action="store_true", help="Show more detailed debug information")
 	options = p.parse_args()
