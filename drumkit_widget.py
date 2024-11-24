@@ -1,4 +1,4 @@
-#  kitbash/drum_widget.py
+#  kitbash/drumkit_widget.py
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
@@ -19,18 +19,19 @@ from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QPushButton
 
 
-class DrumWidget(QFrame):
+class DrumKitWIdget(QFrame):
 
 	sig_group_select = pyqtSignal(str, str, bool, bool)
 	sig_inst_select = pyqtSignal(str, str, bool, bool)
 
-	def __init__(self, drumkit, parent):
+	def __init__(self, filename, parent):
 		super().__init__(parent)
-		self.drumkit = drumkit
+		self.filename = filename
+
 		self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 		self.setFrameStyle(QFrame.Panel)
 		self.setFrameShadow(QFrame.Sunken)
-		self.setObjectName('drum_widget')
+		self.setObjectName('drumkit_widget')
 
 		main_layout = QVBoxLayout()
 		main_layout.setContentsMargins(2,2,2,2)
@@ -62,7 +63,7 @@ class DrumWidget(QFrame):
 		top_layout.addWidget(self.lbl_use_count)
 
 		label = QLabel(self)
-		label.setText(self.drumkit.filename)
+		label.setText(self.filename)
 		top_layout.addWidget(label)
 
 		top_layout.addStretch(20)
@@ -74,6 +75,13 @@ class DrumWidget(QFrame):
 		self.groups = QHBoxLayout()
 		self.groups.setContentsMargins(2,2,2,2)
 		self.groups.setSpacing(0)
+
+		self.frm_groups.setLayout(self.groups)
+		main_layout.addWidget(self.frm_groups)
+		self.setLayout(main_layout)
+
+	def drumkit_loaded(self, drumkit, saved_selections):
+		self.drumkit = drumkit
 		for group in self.drumkit.percussion_groups:
 			if group.empty():
 				continue
@@ -98,10 +106,8 @@ class DrumWidget(QFrame):
 			group_layout.addStretch()
 			group_frame.setLayout(group_layout)
 			self.groups.addWidget(group_frame)
-
-		self.frm_groups.setLayout(self.groups)
-		main_layout.addWidget(self.frm_groups)
-		self.setLayout(main_layout)
+		if saved_selections:
+			self.restore_saved_selections(saved_selections)
 
 	@pyqtSlot(str, QPushButton)
 	def group_select(self, group_id, button):
@@ -184,4 +190,4 @@ class InstrumentButton(QPushButton):
 	pass
 
 
-#  end kitbash/drum_widget.py
+#  end kitbash/drumkit_widget.py

@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog,
 							QAction, QActionGroup, QMenu, QSpacerItem, QSizePolicy
 
 from kitbash.drumkit import Drumkit
-from kitbash.drum_widget import DrumWidget
+from kitbash.drumkit_widget import DrumKitWIdget
 from kitbash.looper_widget import LooperWidget
 
 APPLICATION_NAME = "kitbash"
@@ -55,10 +55,10 @@ class MainWindow(QMainWindow):
 		self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 		self.frm_looper.layout().addWidget(self.looper_widget)
 
-		self.drum_widgets = VListLayout(end_space = 10)
-		self.drum_widgets.setContentsMargins(0,0,0,0)
-		self.drum_widgets.setSpacing(2)
-		self.drums_scroll_contents.setLayout(self.drum_widgets)
+		self.drumkit_widgets = VListLayout(end_space = 10)
+		self.drumkit_widgets.setContentsMargins(0,0,0,0)
+		self.drumkit_widgets.setSpacing(2)
+		self.drums_scroll_contents.setLayout(self.drumkit_widgets)
 		self.threadpool = QThreadPool()
 		self.threadpool.setMaxThreadCount(1)
 
@@ -77,6 +77,7 @@ class MainWindow(QMainWindow):
 
 		self.project_file = None
 		self.project_definition = None
+		self.project_loading = False
 
 		QTimer.singleShot(0, self.layout_complete)
 
@@ -131,16 +132,16 @@ class MainWindow(QMainWindow):
 	@pyqtSlot(str, str, bool, bool)
 	def slot_group_select(self, kitname, group_id, state, ctrl_state):
 		if state and not ctrl_state:
-			for drum_widget in self.drum_widgets:
-				if drum_widget.drumkit.name != kitname:
-					drum_widget.deselect_group(group_id)
+			for drumkit_widget in self.drumkit_widgets:
+				if drumkit_widget.drumkit.name != kitname:
+					drumkit_widget.deselect_group(group_id)
 
 	@pyqtSlot(str, str, bool, bool)
 	def slot_inst_select(self, kitname, inst_id, state, ctrl_state):
 		if state and not ctrl_state:
-			for drum_widget in self.drum_widgets:
-				if drum_widget.drumkit.name != kitname:
-					drum_widget.deselect_inst(inst_id)
+			for drumkit_widget in self.drumkit_widgets:
+				if drumkit_widget.drumkit.name != kitname:
+					drumkit_widget.deselect_inst(inst_id)
 
 	# -----------------------------------------------------------------
 	# Style functions:
@@ -192,7 +193,7 @@ class MainWindow(QMainWindow):
 			if self.is_clear():
 				self.execute_project_load()
 			else:
-				MainWindow.project_clearing = True
+				self.project_clearing = True
 				self.clear()
 		else:
 			self.recent_projects.remove(filename)
@@ -200,15 +201,16 @@ class MainWindow(QMainWindow):
 			DevilBox(f"Project not found: {filename}")
 
 	def is_clear(self):
-		return len(self.drum_widgets) == 0
+		return len(self.drumkit_widgets) == 0
 
 	def clear(self):
 		logging.debug("CLEARING")
-		for widget in reversed(self.drum_widgets):
+		for widget in reversed(self.drumkit_widgets):
 			widget.remove()
 
 	def execute_project_load(self):
-		MainWindow.project_loading = True
+		self.project_clearing = False
+		self.project_loading = True
 		self.set_dirty(False)
 		try:
 			with open(self.project_file, 'r') as fh:
@@ -222,11 +224,13 @@ class MainWindow(QMainWindow):
 			self.settings.setValue("recent_projects", self.recent_projects.items)
 			for drumkit in self.project_definition:
 				self.load_drumkit(drumkit.sfz_filename)
-		MainWindow.project_loading = False
-		MainWindow.project_clearing = False
 
 	def load_drumkit(self, filename):
 		if os.path.exists(filename):
+			widget = DrumKitWIdget(filename, self)
+			self.drumkit_widgets.append(widget)
+			widget.sig_group_select.connect(self.slot_group_select)
+			widget.sig_inst_select.connect(self.slot_inst_select)
 			worker = KitLoader(filename)
 			worker.signals.sig_complete.connect(self.drumkit_loaded)
 			self.threadpool.start(worker)
@@ -239,16 +243,20 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(Drumkit)
 	def drumkit_loaded(self, drumkit):
-		# TODO: Load DrumWidget "empty", and when kit is loaded, fill with groups/instruments
-		widget = DrumWidget(drumkit, self)
-		self.drum_widgets.append(widget)
-		widget.sig_group_select.connect(self.slot_group_select)
-		widget.sig_inst_select.connect(self.slot_inst_select)
-		if self.project_definition:
-			for kitdef in self.project_definition:
-				if kitdef.name == drumkit.name:
-					widget.restore_saved_selections(kitdef.saved_selections)
-					break
+		saved_selections = self.project_definition[drumkit.filename] \
+			if self.project_loading and drumkit.filename in self.project_definition \
+			else None
+		self.drumkit_widget(drumkit.filename).drumkit_loaded(drumkit, saved_selections)
+		if self.project_loading:
+			for widget in self.drumkit_widgets:
+				if widget.drumkit is None:
+					return
+			self.project_loading = False
+
+	def drumkit_widget(self, filename):
+		for widget in self.drumkit_widgets:
+			if widget.filename == filename:
+				return widget
 
 	def set_dirty(self, state=True):
 		self._dirty = state
@@ -309,7 +317,7 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def action_collapse_kits(self):
-		for widget in self.drum_widgets:
+		for widget in self.drumkit_widgets:
 			widget.hide_button.setChecked(True)
 
 	@pyqtSlot()
