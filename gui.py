@@ -10,7 +10,7 @@ from signal import signal, SIGINT, SIGTERM
 from recent_items_list import RecentItemsList
 from qt_extras import SigBlock, ShutUpQT, DevilBox
 from qt_extras.list_layout import HListLayout, VListLayout
-from simple_carla.qt import CarlaQt, QtPlugin, QtWidgetPlugin
+from simple_carla.qt import CarlaQt, QtPlugin
 from sfzdb import SFZ
 
 # PyQt5 imports
@@ -127,7 +127,7 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def layout_complete(self):
-		pass
+		self.start_carla_engine()
 
 	@pyqtSlot(str, str, bool, bool)
 	def slot_group_select(self, kitname, group_id, state, ctrl_state):
@@ -289,10 +289,10 @@ class MainWindow(QMainWindow):
 
 	def closeEvent(self, event):
 		logging.debug('MainWindow close()')
+		CarlaQt.instance.delete()
 		self.settings.setValue("geometry", self.saveGeometry())
 		self.save_geometry()
 		self.settings.sync()
-		#self.kill_timers()
 		event.accept()
 
 	# -----------------------------------------------------------------
@@ -394,9 +394,9 @@ class MainWindow(QMainWindow):
 	# Carla management:
 
 	def start_carla_engine(self):
-		if Carla.instance.engine_init("JACK", APPLICATION_NAME):
+		if CarlaQt.instance.engine_init("JACK"):
 			return logging.debug('======= Engine started ========')
-		audioError = Carla.instance.get_last_error()
+		audioError = CarlaQt.instance.get_last_error()
 		if audioError:
 			DevilBox("Could not connect to JACK audio backend; possible reasons:\n%s" % audioError)
 		else:
@@ -404,35 +404,25 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def slot_timer_timeout(self):
-		info = Carla.instance.get_runtime_engine_info()
+		info = CarlaQt.instance.get_runtime_engine_info()
 		self.refresh_xruns(info['load'], info['xruns'])
 
 	def refresh_xruns(self, load, xruns):
-		self.b_xruns.setText("%s Xrun%s" % (
-			str(xruns) if (xruns >= 0) else "--",
-			"" if (xruns == 1) else "s"
-		))
-		self.load_indicator.setValue(int(load))
+		pass
 
 	def refresh_buffer_size(self, size):
-		if self._buffer_size == size:
-			return
-		self._buffer_size = size
-		self.lbl_buffer_size.setText(str(size))
+		pass
 
 	def refresh_sample_rate(self, rate):
-		if self._sample_rate == rate:
-			return
-		self._sample_rate = rate
-		self.lbl_sample_rate.setText(str(rate))
+		pass
 
 	@pyqtSlot(bool)
 	def slot_clear_xruns(self):
-		Carla.instance.clear_engine_xruns()
+		CarlaQt.instance.clear_engine_xruns()
 
 	@pyqtSlot()
 	def slot_cancel_action_click(self):
-		Carla.instance.cancel_engine_action()
+		CarlaQt.instance.cancel_engine_action()
 
 	# -----------------------------------------------------------------
 	# Slots which catch signals from Carla
@@ -443,10 +433,7 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(QObject)
 	def slot_PluginRemoved(self, plugin):
-		if isinstance(plugin, SharedPluginWidget):
-			self.shared_plugin_layout.remove(plugin)
-		else:
-			self.track_widget(plugin.port, plugin.slot).plugin_removed(plugin)
+		pass
 
 	@pyqtSlot()
 	def slot_LastPluginRemoved(self):
@@ -455,12 +442,6 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(int, int, int, int, float, str)
 	def slot_EngineStarted(self, plugin_count, process_mode, transport_mode, buffer_size, sample_rate, driver_name):
-		self.frm_frame.setEnabled(True)
-		self.frm_time.setEnabled(True)
-		self.frm_events.setEnabled(True)
-		self.refresh_buffer_size(buffer_size)
-		self.refresh_sample_rate(int(sample_rate))
-		self.refresh_xruns(0.0, 0)
 		self.update_timer.start()
 
 	@pyqtSlot()

@@ -18,6 +18,8 @@ from PyQt5.QtWidgets import QFrame
 from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QPushButton
 
+from kitbash.liquid import LiquidSFZ
+
 
 class DrumKitWIdget(QFrame):
 
@@ -27,6 +29,9 @@ class DrumKitWIdget(QFrame):
 	def __init__(self, filename, parent):
 		super().__init__(parent)
 		self.filename = filename
+		self.synth = LiquidSFZ(self.filename)
+		self.synth.sig_Ready.connect(self.synth_ready)
+		self.synth.add_to_carla()
 
 		self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 		self.setFrameStyle(QFrame.Panel)
@@ -82,6 +87,7 @@ class DrumKitWIdget(QFrame):
 
 	def drumkit_loaded(self, drumkit, saved_selections):
 		self.drumkit = drumkit
+		self.saved_selections = saved_selections
 		for group in self.drumkit.percussion_groups:
 			if group.empty():
 				continue
@@ -106,8 +112,6 @@ class DrumKitWIdget(QFrame):
 			group_layout.addStretch()
 			group_frame.setLayout(group_layout)
 			self.groups.addWidget(group_frame)
-		if saved_selections:
-			self.restore_saved_selections(saved_selections)
 
 	@pyqtSlot(str, QPushButton)
 	def group_select(self, group_id, button):
@@ -175,6 +179,11 @@ class DrumKitWIdget(QFrame):
 
 	def restore_saved_selections(self, selections):
 		raise NotImplemented()
+
+	@pyqtSlot(int)
+	def synth_ready(self, plugin_id):
+		# restore_saved_selections
+		pass
 
 
 class TitleFrame(QFrame):
