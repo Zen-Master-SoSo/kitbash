@@ -88,7 +88,7 @@ class LooperWidget(QFrame):
 			for button in self.frm_loops.findChildren(QPushButton):
 				if button.loop_id != loop_id:
 					button.setChecked(False)
-		self.looper.load_loop(loop_id).active = state
+		self.looper.load_loop(loop_id).play = state
 
 	@pyqtSlot(bool)
 	def play_toggle(self, state):

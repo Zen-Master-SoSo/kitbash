@@ -25,7 +25,7 @@ class Loop:
 		evfile = io.BytesIO(midi_events)
 		self.events = np.load(evfile)
 		self._beat_offset = 0
-		self._active = False
+		self.play = False
 
 	@property
 	def event_count(self):
@@ -37,9 +37,7 @@ class Loop:
 	@property
 	def last_beat(self):
 		"""
-		Returns the number of beats in which all events are included, i.e.:
-			If last event is beat 0.5, returns 1
-			if last event is beat 3.75, returns 4
+		Returns the highest beat of all events
 		"""
 		return self.events[-1]['beat']
 
@@ -56,26 +54,11 @@ class Loop:
 		self.events['beat'] += (val - self._beat_offset)
 		self._beat_offset = val
 
-	@property
-	def active(self):
-		return self._active
-
-	@active.setter
-	def active(self, state):
-		self._active = state
-
 	def events_between(self, start, end):
 		"""
 		Returns events whose "beat" is >= start and < end
 		"""
-		if self._active:
-			for i in range(len(self.events)):
-				if self.events[i]['beat'] >= start:
-					for j in range(i, len(self.events)):
-						if self.events[j]['beat'] > end:
-							break
-					return self.events[i:j]
-		return np.zeros(0, dtype = EVENT_STRUCT)
+		return self.events[(self.events['beat'] >= start) & (self.events['beat'] < end)]
 
 	def __str__(self):
 		return '<Loop #{0.loop_id}: "{0.name}"; {0.beats_per_measure} beats per measure; {0.measures} measures; {0.event_count} events>'.format(self)

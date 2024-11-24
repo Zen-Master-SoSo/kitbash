@@ -22,7 +22,7 @@ class Looper:
 		self._bpm = DEFAULT_BEATS_PER_MINUTE
 		self.beats_per_measure = None
 		self.beat = 0.0
-		self.end_beat = 0.0
+		self.last_beat = 0.0
 		self.loops = []
 		self.state = Looper.INACTIVE
 		self.__real_process_callback = self.null_process_callback
@@ -100,12 +100,12 @@ class Looper:
 	def remeasure(self):
 		if self.loops:
 			last_beat = max([loop.last_beat for loop in self.loops])
-			self.end_beat = float(ceil(last_beat / self.beats_per_measure) * self.beats_per_measure)
-			if self.beat > self.end_beat:
+			self.last_beat = float(ceil(last_beat / self.beats_per_measure) * self.beats_per_measure)
+			if self.beat > self.last_beat:
 				self.beat = 0.0
 		else:
 			self.beat = 0.0
-			self.end_beat = 0.0
+			self.last_beat = 0.0
 
 	def _loaded_loop(self, loop_id):
 		for loop in self.loops:
@@ -149,9 +149,8 @@ class Looper:
 			self.out_port.clear_buffer()
 			end_beat = self.beat + self.beats_per_process
 			while True:
-				events_this_block = np.hstack([
-					loop.events_between(self.beat, end_beat) for loop in self.loops
-				])
+				events_this_block = np.hstack([loop.events_between(self.beat, end_beat) \
+					for loop in self.loops if loop.play])
 				if len(events_this_block):
 					for evt in np.sort(events_this_block, kind="heapsort", order="beat"):
 						offset = int((evt['beat'] - self.beat) * self.samples_per_beat)
