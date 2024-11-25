@@ -58,6 +58,7 @@ class MainWindow(QMainWindow):
 
 		else:
 			self.looper_widget = LooperWidget(self, loops_database())
+			self.looper_widget.single_loop = True
 			self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 			self.frm_looper.layout().addWidget(self.looper_widget)
 
