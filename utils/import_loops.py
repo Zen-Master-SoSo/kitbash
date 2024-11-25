@@ -3,7 +3,7 @@
 #  Copyright 2024 liyang <liyang@veronica>
 #
 import sys, logging, argparse
-from kitbash.loops import Loops
+from kitbash import loops_database
 
 def main():
 	parser = argparse.ArgumentParser()
@@ -24,12 +24,13 @@ def main():
 	log_format = "[%(filename)24s:%(lineno)4d] %(levelname)-8s %(message)s"
 	logging.basicConfig(level = log_level, format = log_format)
 
+	loops = loops_database()
 	if options.nuke:
-		Loops.init_schema()
+		loops.init_schema()
 	elif options.delete:
-		Loops.delete_all()
+		loops.delete_all()
 	if options.Directory:
-		Loops.import_dirs(options.Directory)
+		loops.import_dirs(options.Directory)
 
 
 if __name__ == "__main__":

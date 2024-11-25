@@ -22,7 +22,9 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog,
 
 from kitbash.drumkit import Drumkit
 from kitbash.drumkit_widget import DrumKitWIdget
-from kitbash.looper_widget import LooperWidget
+from kitbash import loops_database
+from jack_midi_looper.looper_widget import LooperWidget
+
 
 APPLICATION_NAME = "kitbash"
 FILES_TYPE = "SFZ (*.sfz)"
@@ -55,7 +57,7 @@ class MainWindow(QMainWindow):
 			self.frm_looper = None
 
 		else:
-			self.looper_widget = LooperWidget(self)
+			self.looper_widget = LooperWidget(self, loops_database())
 			self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 			self.frm_looper.layout().addWidget(self.looper_widget)
 
