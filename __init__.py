@@ -5,7 +5,9 @@
 #  end kitbash/__init__.py
 import os
 from appdirs import user_config_dir
-from jack_midi_looper import Loops
+from jack_midi_looper import LoopsDB
+
+APPLICATION_NAME = "kitbash"
 
 def loops_database():
 	try:
@@ -16,5 +18,5 @@ def loops_database():
 			os.mkdir(dbpath)
 		except FileExistsError:
 			pass
-		loops_database.instance = Loops(dbpath)
+		loops_database.instance = LoopsDB(dbpath)
 	return loops_database.instance

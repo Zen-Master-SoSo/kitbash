@@ -20,13 +20,13 @@ from PyQt5.QtGui import		QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog, QInputDialog, \
 							QAction, QActionGroup, QMenu, QSpacerItem, QSizePolicy
 
+from kitbash import loops_database, APPLICATION_NAME
+from kitbash.looper import MultiPortLooper
 from kitbash.drumkit import Drumkit
 from kitbash.drumkit_widget import DrumKitWIdget
-from kitbash import loops_database
 from jack_midi_looper.looper_widget import LooperWidget
 
 
-APPLICATION_NAME = "kitbash"
 FILES_TYPE = "SFZ (*.sfz)"
 
 
@@ -54,11 +54,14 @@ class MainWindow(QMainWindow):
 		self.recent_drumkits = RecentItemsList(self.settings.value("recent_drumkits", defaultValue=[]))
 
 		if self.options.no_audio:
-			self.frm_looper = None
+			self.frm_looper.hide()
+			self.looper = None
 
 		else:
-			self.looper_widget = LooperWidget(self, loops_database())
+			self.looper = MultiPortLooper()
+			self.looper_widget = LooperWidget(self, loops_database(), self.looper)
 			self.looper_widget.single_loop = True
+			self.looper_widget.columns = 8
 			self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 			self.frm_looper.layout().addWidget(self.looper_widget)
 
@@ -153,7 +156,7 @@ class MainWindow(QMainWindow):
 		if state and not ctrl_state:
 			for drumkit_widget in self.drumkit_widgets:
 				if drumkit_widget.drumkit.name != kitname:
-					drumkit_widget.deselect_inst(inst_id)
+					drumkit_widget.deselect_instrument(inst_id)
 
 	# -----------------------------------------------------------------
 	# Style functions:
@@ -264,6 +267,7 @@ class MainWindow(QMainWindow):
 			self.drumkit_widgets.append(widget)
 			widget.sig_group_select.connect(self.slot_group_select)
 			widget.sig_inst_select.connect(self.slot_inst_select)
+			widget.sig_synth_ready.connect(self.drumkit_synth_ready)
 			worker = KitLoader(filename)
 			worker.signals.sig_complete.connect(self.drumkit_loaded)
 			self.threadpool.start(worker)
@@ -276,16 +280,27 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(Drumkit)
 	def drumkit_loaded(self, drumkit):
-		saved_selections = self.project_definition[drumkit.filename] \
-			if self.project_loading and drumkit.filename in self.project_definition \
-			else None
-		self.drumkit_widget(drumkit.filename).drumkit_loaded(drumkit, saved_selections)
+		"""
+		Called from KitLoader when it is finished loading
+		"""
+		logging.debug(f"{drumkit} loaded")
+		drumkit_widget = self.drumkit_widget(drumkit.filename)
+		drumkit_widget.drumkit_loaded(drumkit)
 		self.action_CollapseKits.setEnabled(True)
 		if self.project_loading:
+			drumkit_widget.apply_selections(self.project_definition[drumkit.filename])
+			# Determine if project loading is finished:
 			for widget in self.drumkit_widgets:
 				if widget.drumkit is None:
 					return
 			self.project_loading = False
+
+	@pyqtSlot(QObject)
+	def drumkit_synth_ready(self, drumkit_widget):
+		logging.debug(f"{drumkit_widget} synth ready")
+		if self.looper:
+			drumkit_widget.port_number = self.looper.add_port()
+			logging.debug(self.looper.out_ports[drumkit_widget.port_number])
 
 	def drumkit_widget(self, filename):
 		for widget in self.drumkit_widgets:
@@ -443,7 +458,7 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def slot_PortsChanged(self):
-		pass
+		logging.debug('PORTS CHANGED')
 
 	@pyqtSlot(QObject)
 	def slot_PluginRemoved(self, plugin):

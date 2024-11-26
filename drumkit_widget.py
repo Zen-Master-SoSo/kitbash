@@ -6,6 +6,7 @@ import os, logging
 from functools import partial
 
 from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QObject
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtCore import QSize
@@ -25,6 +26,7 @@ class DrumKitWIdget(QFrame):
 
 	sig_group_select = pyqtSignal(str, str, bool, bool)
 	sig_inst_select = pyqtSignal(str, str, bool, bool)
+	sig_synth_ready = pyqtSignal(QObject)
 
 	def __init__(self, filename, parent):
 		super().__init__(parent)
@@ -87,9 +89,11 @@ class DrumKitWIdget(QFrame):
 		main_layout.addWidget(self.frm_groups)
 		self.setLayout(main_layout)
 
-	def drumkit_loaded(self, drumkit, saved_selections):
+	def drumkit_loaded(self, drumkit):
+		"""
+		Called when KitLoader is finshed loading and interpreting SFZ.
+		"""
 		self.drumkit = drumkit
-		self.saved_selections = saved_selections
 		for group in self.drumkit.percussion_groups:
 			if group.empty():
 				continue
@@ -147,7 +151,7 @@ class DrumKitWIdget(QFrame):
 			button.setChecked(False)
 		self.update_count()
 
-	def deselect_inst(self, inst_id):
+	def deselect_instrument(self, inst_id):
 		button = self.findChild(InstrumentButton, inst_id)
 		if button is None:
 			return logging.error('Could not find button ' + inst_id)
@@ -166,8 +170,15 @@ class DrumKitWIdget(QFrame):
 
 	@pyqtSlot(int)
 	def synth_ready(self, plugin_id):
-		# restore_saved_selections
-		pass
+		"""
+		Received from Carla when LiquidSFZ is ready to play.
+		Notifies MainWindow so the MultiPortLooper can connect a new port to this
+		widget's synth.
+		"""
+		self.sig_synth_ready.emit(self)
+
+	def __str__(self):
+		return f"<DrumKitWIdget {self.filename}>"
 
 
 class TitleFrame(QFrame):

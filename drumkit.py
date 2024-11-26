@@ -95,6 +95,8 @@ class Drumkit:
 			if not group.empty():
 				group.write(stream)
 
+	def __str__(self):
+		return f"<Drumkit {self.filename}>"
 
 
 #  end kitbash/drumkit.py
