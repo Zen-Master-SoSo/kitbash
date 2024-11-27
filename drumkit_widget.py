@@ -24,8 +24,9 @@ from kitbash.liquid import LiquidSFZ
 
 class DrumKitWidget(QFrame):
 
-	sig_inst_toggle = pyqtSignal(str, str, int, bool, bool)
+	sig_inst_toggle = pyqtSignal(QObject, str, int, bool, bool)
 	sig_synth_ready = pyqtSignal(QObject)
+	sig_remove_drumkit = pyqtSignal(QObject)
 
 	def __init__(self, filename, parent):
 		super().__init__(parent)
@@ -75,6 +76,13 @@ class DrumKitWidget(QFrame):
 		top_layout.addWidget(label)
 
 		top_layout.addStretch(20)
+
+		remove_button = QPushButton(self)
+		remove_button.setIcon(QIcon.fromTheme('window-close'))
+		remove_button.setIconSize(QSize(16,16))
+		remove_button.clicked.connect(self.remove_clicked)
+		top_layout.addWidget(remove_button)
+
 		frm_title.setLayout(top_layout)
 
 		main_layout.addWidget(frm_title)
@@ -109,7 +117,6 @@ class DrumKitWidget(QFrame):
 		Called from gui after synth ready.
 		port_number, port_name are used Jack.MidiOwnPort.register()
 		"""
-		logging.debug(f'{self} setting port {port_number}, {port_name}')
 		self.port_number = port_number
 		self.port_name = port_name
 
@@ -129,8 +136,12 @@ class DrumKitWidget(QFrame):
 
 	@pyqtSlot(str, QPushButton)
 	def instrument_toggled(self, inst_id, button):
-		self.sig_inst_toggle.emit(self.drumkit.filename, inst_id, self.port_number, button.isChecked(), self.ctrl_pressed())
+		self.sig_inst_toggle.emit(self, inst_id, self.port_number, button.isChecked(), self.ctrl_pressed())
 		self.update_count()
+
+	@pyqtSlot()
+	def remove_clicked(self):
+		self.sig_remove_drumkit.emit(self)
 
 	@pyqtSlot(bool)
 	def hide(self, state):

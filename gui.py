@@ -21,11 +21,13 @@ from PyQt5.QtGui import		QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog, \
 							QAction, QActionGroup, QMenu, QSizePolicy
 
+from jack_midi_looper import Pause
+from jack_midi_looper.looper_widget import LooperWidget
+
 from kitbash import loops_database, APPLICATION_NAME
 from kitbash.looper import MultiPortLooper
 from kitbash.drumkit import Drumkit
 from kitbash.drumkit_widget import DrumKitWidget
-from jack_midi_looper.looper_widget import LooperWidget
 
 
 FILES_TYPE = "SFZ (*.sfz)"
@@ -74,7 +76,7 @@ class MainWindow(QMainWindow):
 			self.update_timer.timeout.connect(self.slot_timer_timeout)
 
 			self.looper_port_widgets = {}	# dict of DrumKitWidget, indexed on Jack.OwnMidiPort.name
-			self.audio_out_client = None
+			self.audio_playback_client = None
 
 		self.drumkit_widgets = VListLayout(end_space = 10)
 		self.drumkit_widgets.setContentsMargins(0,0,0,0)
@@ -152,16 +154,14 @@ class MainWindow(QMainWindow):
 		if not self.options.no_audio:
 			self.start_carla_engine()
 
-	@pyqtSlot(str, str, int, bool, bool)
-	def slot_inst_toggle(self, filename, inst_id, port_number, state, ctrl_state):
+	@pyqtSlot(QObject, str, int, bool, bool)
+	def slot_inst_toggle(self, source_widget, inst_id, port_number, state, ctrl_state):
 		if state and not ctrl_state:
 			for drumkit_widget in self.drumkit_widgets:
-				if drumkit_widget.drumkit.filename != filename:
+				if not drumkit_widget is source_widget:
 					drumkit_widget.deselect_instrument(inst_id)
 		elif not state:
-			for drumkit_widget in self.drumkit_widgets:
-				if drumkit_widget.drumkit.filename == filename:
-					drumkit_widget.deselect_parent_group(inst_id)
+			source_widget.deselect_parent_group(inst_id)
 		#logging.debug(f'slot_inst_toggle {filename} {inst_id} {state}')
 		self.looper.set_mapping(MIDI_DRUM_PITCHES[inst_id], port_number if state else None)
 
@@ -277,12 +277,11 @@ class MainWindow(QMainWindow):
 
 	def load_drumkit(self, filename):
 		if os.path.exists(filename):
-			if self.looper:
-				self.looper.stop()
 			drumkit_widget = DrumKitWidget(filename, self)
 			self.drumkit_widgets.append(drumkit_widget)
 			drumkit_widget.sig_inst_toggle.connect(self.slot_inst_toggle)
 			drumkit_widget.sig_synth_ready.connect(self.drumkit_synth_ready)
+			drumkit_widget.sig_remove_drumkit.connect(self.slot_remove_drumkit)
 			worker = KitLoader(drumkit_widget)
 			worker.signals.sig_complete.connect(self.drumkit_loaded)
 			self.threadpool.start(worker)
@@ -307,13 +306,20 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(QObject)
 	def drumkit_synth_ready(self, drumkit_widget):
-		logging.debug(f"{drumkit_widget} synth ready")
 		if self.looper:
-			drumkit_widget.set_looper_jack_port(*self.looper.add_port())
+			with Pause(self.looper):
+				drumkit_widget.set_looper_jack_port(*self.looper.add_port())
 			self.looper_port_widgets[drumkit_widget.port_name] = drumkit_widget
-			if self.audio_out_client is None:
+			if self.audio_playback_client is None:
 				self.select_audio_playback_client()
-			drumkit_widget.synth.connect_outputs_to(self.audio_out_client)
+			drumkit_widget.synth.connect_outputs_to(self.audio_playback_client)
+
+	@pyqtSlot(QObject)
+	def slot_remove_drumkit(self, drumkit_widget):
+		self.looper.delete_port(drumkit_widget.port_number)
+		self.drumkit_widgets.remove(drumkit_widget)
+		drumkit_widget.synth.delete()
+		drumkit_widget.deleteLater()
 
 	def drumkit_widget(self, filename):
 		for widget in self.drumkit_widgets:
@@ -326,8 +332,8 @@ class MainWindow(QMainWindow):
 			logging.warning('No physical playback client found')
 		else:
 			logging.debug(f'Found physical playback client "{client_name}"')
-			self.audio_out_client = CarlaQt.instance.system_client_by_name(client_name)
-			if self.audio_out_client is None:
+			self.audio_playback_client = CarlaQt.instance.system_client_by_name(client_name)
+			if self.audio_playback_client is None:
 				return logging.warning(f'Carla did not find system playback client "{client_name}"')
 			self.lbl_audio_client.setText(client_name)
 
@@ -486,8 +492,8 @@ class MainWindow(QMainWindow):
 	@pyqtSlot(PatchbayClient)
 	def slot_PatchbayClientRemoved(self, client):
 		logging.debug(f'slot_PatchbayClientRemoved {client}')
-		if client is self.audio_out_client:
-			self.audio_out_client = None
+		if client is self.audio_playback_client:
+			self.audio_playback_client = None
 
 	@pyqtSlot(PatchbayPort)
 	def slot_PatchbayPortAdded(self, port):
@@ -496,7 +502,7 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(PatchbayPort)
 	def slot_PatchbayPortRemoved(self, port):
-		logging.debug(f'slot_PatchbayPortRemoved {port}')
+		pass
 
 	@pyqtSlot(QObject)
 	def slot_PluginRemoved(self, plugin):

@@ -10,6 +10,7 @@ from PyQt5.QtCore import QObject
 from PyQt5.QtCore import pyqtSignal
 from jack_midi_looper import (
 	Looper,
+	Pause,
 	JackShutdownError,
 	DEFAULT_BEATS_PER_MINUTE
 )
@@ -70,11 +71,12 @@ class MultiPortLooper(Looper):
 
 		"port_number" is the number assigned to the port when added.
 		"""
-		self.out_ports[port_number].unregister()
-		for k,v in self.pitch_maps:
-			if v == port.port_number:
-				self.pitch_maps[k] = None
-		del	self.out_ports[port_number]
+		with Pause(self):
+			self.out_ports[port_number].unregister()
+			for k,v in self.pitch_maps.items():
+				if v == port_number:
+					self.pitch_maps[k] = None
+			del	self.out_ports[port_number]
 
 	def set_mapping(self, pitch, port_number):
 		"""
