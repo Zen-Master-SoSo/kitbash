@@ -2,11 +2,9 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
-
 from os import path
 from midi_notes import Note, MIDI_DRUM_NAMES, MIDI_DRUM_IDS
 from kitbash.sfz import SFZ
-
 
 
 class PercussionInstrument:
