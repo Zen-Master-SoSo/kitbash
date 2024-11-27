@@ -6,6 +6,8 @@ import os, logging
 from math import ceil
 import numpy as np
 from jack import Client, CallbackExit
+from PyQt5.QtCore import QObject
+from PyQt5.QtCore import pyqtSignal
 from jack_midi_looper import (
 	Looper,
 	JackShutdownError,
@@ -22,7 +24,8 @@ class MultiPortLooper(Looper):
 	port_number = 0
 
 	def __init__(self):
-		self.client_name = APPLICATION_NAME
+		self.client_name = 'looper'
+		self.signals = LooperSignals()
 		self._bpm = DEFAULT_BEATS_PER_MINUTE
 		self.beats_per_measure = None
 		self.beat = 0.0
@@ -43,35 +46,44 @@ class MultiPortLooper(Looper):
 		self.client.activate()
 		self.client.get_ports()
 
+	def first_physical_playback_client(self):
+		for port in self.client.get_ports(is_audio=True, is_input=True, is_physical=True):
+			return port.name.split(':')[0]
+
 	def add_port(self):
 		"""
 		Called when adding drumkit. Each drumkit gets its own synth, and this
 		MultiPortLooper is connected to each synth via its own port.
+
 		Returns:
-			port_number of the newly created port.
+			port_number:	(int) id number of the newly created port,
+			port_name:		(str) Jack port name
 		"""
 		self.port_number += 1
-		self.out_ports[self.port_number] = self.client.midi_outports.register('looper_%d' % self.port_number)
-		return self.port_number
+		port_name = 'looper_%02d' % self.port_number
+		self.out_ports[self.port_number] = self.client.midi_outports.register(port_name)
+		return self.port_number, port_name
 
 	def delete_port(self, port_number):
 		"""
 		Called when removing drumkit.
+
+		"port_number" is the number assigned to the port when added.
 		"""
 		self.out_ports[port_number].unregister()
+		for k,v in self.pitch_maps:
+			if v == port.port_number:
+				self.pitch_maps[k] = None
 		del	self.out_ports[port_number]
 
-	def map_key(self, pitch, port_number):
+	def set_mapping(self, pitch, port_number):
 		"""
-		Send "Note On" events with the given pitch to the given port number.
+		Map the given port_number to the given pitch, so that MIDI "Note On" events
+		with the given pitch are sent to the port identified by the the given
+		port_number. If port_number is None, MIDI "Note On" events with the given pitch
+		are not sent anywhere.
 		"""
 		self.pitch_maps[pitch] = port_number
-
-	def unmap_key(self, pitch):
-		"""
-		Prevent sending "Note On" events with the given pitch to any port.
-		"""
-		self.pitch_maps[pitch] = None
 
 	def _play_process_callback(self, frames):
 		if self.any_loop_active():
@@ -92,6 +104,34 @@ class MultiPortLooper(Looper):
 					break
 				last_beat -= self.beats_length
 				self.beat -= self.beats_length
+
+	def _stop_process_callback(self, frames):
+		"""
+		Sends MIDI message "All Notes Off" (0x7B) to all channels from 0 - 15,
+		and then transitions to "_null_process_callback".
+		Overrides Looper._stop_process_callback to send note off to EVERY port
+		"""
+		msg = bytearray.fromhex('B07B')
+		for channel in range(16):
+			for port in self.out_ports.values():
+				port.clear_buffer()
+				port.write_midi_event(0, msg)
+			msg[0] += 1
+		self.beat = 0.0
+		self._real_process_callback = self._null_process_callback
+
+	def stop(self):
+		super().stop()
+		self.signals.sig_state_changed.emit(False)
+
+	def play(self):
+		super().play()
+		self.signals.sig_state_changed.emit(True)
+
+
+class LooperSignals(QObject):
+
+	sig_state_changed = pyqtSignal(bool)
 
 
 #  end kitbash/looper.py

@@ -22,10 +22,9 @@ from PyQt5.QtWidgets import QPushButton
 from kitbash.liquid import LiquidSFZ
 
 
-class DrumKitWIdget(QFrame):
+class DrumKitWidget(QFrame):
 
-	sig_group_select = pyqtSignal(str, str, bool, bool)
-	sig_inst_select = pyqtSignal(str, str, bool, bool)
+	sig_inst_toggle = pyqtSignal(str, str, int, bool, bool)
 	sig_synth_ready = pyqtSignal(QObject)
 
 	def __init__(self, filename, parent):
@@ -89,36 +88,48 @@ class DrumKitWIdget(QFrame):
 		main_layout.addWidget(self.frm_groups)
 		self.setLayout(main_layout)
 
-	def drumkit_loaded(self, drumkit):
+	def drumkit_loaded(self):
 		"""
 		Called when KitLoader is finshed loading and interpreting SFZ.
 		"""
-		self.drumkit = drumkit
 		for group in self.drumkit.percussion_groups:
 			if group.empty():
 				continue
 			group_frame = GroupFrame(group, self)
-			group_frame.group_button.clicked.connect(partial(self.group_select, group.group_id, group_frame.group_button))
+			group_frame.group_button.clicked.connect(partial(self.group_clicked, group.group_id, group_frame.group_button))
 			for inst in group.instruments.values():
 				inst_button = InstrumentButton(inst, group_frame)
-				inst_button.clicked.connect(partial(self.inst_select, inst.inst_id, inst_button))
+				inst_button.toggled.connect(partial(self.instrument_toggled, inst.inst_id, inst_button))
 				group_frame.group_layout.addWidget(inst_button)
 			group_frame.group_layout.addStretch()
 			self.groups.addWidget(group_frame)
 
-	@pyqtSlot(str, QPushButton)
-	def group_select(self, group_id, button):
-		state = button.isChecked()
-		for button in button.parentWidget().findChildren(InstrumentButton):
-			button.setChecked(state)
-		self.sig_group_select.emit(self.drumkit.name, group_id, button.isChecked(), self.ctrl_pressed())
-		self.update_count()
+	def set_looper_jack_port(self, port_number, port_name):
+		"""
+		Called from gui after synth ready.
+		port_number, port_name are used Jack.MidiOwnPort.register()
+		"""
+		logging.debug(f'{self} setting port {port_number}, {port_name}')
+		self.port_number = port_number
+		self.port_name = port_name
+
+	def set_carla_looper_port(self, port):
+		"""
+		Called when Carla sends notification that a patchbay client has been added,
+		when the client_name matches the port name from Looper.add_port().
+		"""
+		self.carla_looper_port = port
+		for liquid_port in self.synth.midi_ins():
+			port.connect_to(liquid_port)
 
 	@pyqtSlot(str, QPushButton)
-	def inst_select(self, inst_id, button):
-		if button.isChecked():
-			button.parentWidget().findChild(GroupButton).setChecked(False)
-		self.sig_inst_select.emit(self.drumkit.name, inst_id, button.isChecked(), self.ctrl_pressed())
+	def group_clicked(self, group_id, button):
+		for inst_button in button.parentWidget().findChildren(InstrumentButton):
+			inst_button.setChecked(button.isChecked())
+
+	@pyqtSlot(str, QPushButton)
+	def instrument_toggled(self, inst_id, button):
+		self.sig_inst_toggle.emit(self.drumkit.filename, inst_id, self.port_number, button.isChecked(), self.ctrl_pressed())
 		self.update_count()
 
 	@pyqtSlot(bool)
@@ -143,21 +154,16 @@ class DrumKitWIdget(QFrame):
 	def ctrl_pressed(self):
 		return QApplication.keyboardModifiers() == Qt.ControlModifier
 
-	def deselect_group(self, group_id):
-		frame = self.findChild(GroupFrame, group_id)
-		if frame is None:
-			return logging.error('Could not find frame ' + group_id)
-		for button in frame.findChildren(QPushButton):
-			button.setChecked(False)
-		self.update_count()
+	def deselect_parent_group(self, inst_id):
+		inst_button = self.findChild(InstrumentButton, inst_id)
+		inst_button.parentWidget().findChild(GroupButton).setChecked(False)
 
 	def deselect_instrument(self, inst_id):
 		button = self.findChild(InstrumentButton, inst_id)
-		if button is None:
-			return logging.error('Could not find button ' + inst_id)
-		button.setChecked(False)
-		button.parentWidget().findChild(GroupButton).setChecked(False)
-		self.update_count()
+		if button:	# May not exist, as not all Drumkits use the same instruments
+			button.setChecked(False)
+			button.parentWidget().findChild(GroupButton).setChecked(False)
+			self.update_count()
 
 	def saved_selections(self):
 		"""
@@ -178,7 +184,7 @@ class DrumKitWIdget(QFrame):
 		self.sig_synth_ready.emit(self)
 
 	def __str__(self):
-		return f"<DrumKitWIdget {self.filename}>"
+		return "<DrumKitWidget %s>" % os.path.basename(self.filename)
 
 
 class TitleFrame(QFrame):

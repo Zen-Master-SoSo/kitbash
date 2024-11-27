@@ -1,23 +1,23 @@
 
 
-DrumKitWIdget QLabel {
+DrumKitWidget QLabel {
 	color: #666;
 	font-size: 10pt;
 	margin-left: 8px;
 }
 
-DrumKitWIdget TitleFrame {
+DrumKitWidget TitleFrame {
 }
 
-DrumKitWIdget GroupFrame {
+DrumKitWidget GroupFrame {
 }
 
-DrumKitWIdget GroupButton {
+DrumKitWidget GroupButton {
 	font-weight: bold;
 	font-size: 10pt;
 }
 
-DrumKitWIdget InstrumentButton {
+DrumKitWidget InstrumentButton {
 	font-size: 8.5pt;
 }
 

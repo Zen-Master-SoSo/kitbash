@@ -9,8 +9,6 @@ from kitbash.sfz import SFZ
 
 class LiquidSFZ(QtPlugin):
 
-	sig_MIDIActiveChanged = pyqtSignal(bool)
-
 	plugin_def = {
 		'build': 2,
 		'type': 4,		# PLUGIN_LV2
@@ -30,10 +28,6 @@ class LiquidSFZ(QtPlugin):
 	def auto_load_complete(self):
 		self.initialized = True
 		self.check_ports_ready()
-
-	def midi_active(self, state):
-		logging.debug(f"{self} midi_active")
-		self.sig_MIDIActiveChanged.emit(state)
 
 
 #  end kitbash/liquid.py
