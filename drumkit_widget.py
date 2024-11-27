@@ -19,12 +19,13 @@ from PyQt5.QtWidgets import QFrame
 from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QPushButton
 
+from qt_extras import SigBlock
 from kitbash.liquid import LiquidSFZ
 
 
 class DrumKitWidget(QFrame):
 
-	sig_inst_toggle = pyqtSignal(QObject, str, int, bool, bool)
+	sig_inst_toggle = pyqtSignal(QObject, str, bool, bool)
 	sig_synth_ready = pyqtSignal(QObject)
 	sig_remove_drumkit = pyqtSignal(QObject)
 
@@ -98,13 +99,15 @@ class DrumKitWidget(QFrame):
 
 	def drumkit_loaded(self):
 		"""
-		Called when KitLoader is finshed loading and interpreting SFZ.
+		Called when KitLoader is finshed loading and interpreted SFZ.
+		KitLoader sets the "drumkit" attribute of this widget.
 		"""
 		for group in self.drumkit.percussion_groups:
 			if group.empty():
 				continue
 			group_frame = GroupFrame(group, self)
-			group_frame.group_button.clicked.connect(partial(self.group_clicked, group.group_id, group_frame.group_button))
+			group_frame.group_id = group.group_id
+			group_frame.group_button.clicked.connect(partial(self.group_clicked, group_frame))
 			for inst in group.instruments.values():
 				inst_button = InstrumentButton(inst, group_frame)
 				inst_button.toggled.connect(partial(self.instrument_toggled, inst.inst_id, inst_button))
@@ -129,14 +132,15 @@ class DrumKitWidget(QFrame):
 		for liquid_port in self.synth.midi_ins():
 			port.connect_to(liquid_port)
 
-	@pyqtSlot(str, QPushButton)
-	def group_clicked(self, group_id, button):
-		for inst_button in button.parentWidget().findChildren(InstrumentButton):
-			inst_button.setChecked(button.isChecked())
+	@pyqtSlot(QFrame)
+	def group_clicked(self, group_frame):
+		group_button = group_frame.findChild(GroupButton)
+		for inst_button in group_frame.findChildren(InstrumentButton):
+			inst_button.setChecked(group_button.isChecked())
 
 	@pyqtSlot(str, QPushButton)
 	def instrument_toggled(self, inst_id, button):
-		self.sig_inst_toggle.emit(self, inst_id, self.port_number, button.isChecked(), self.ctrl_pressed())
+		self.sig_inst_toggle.emit(self, inst_id, button.isChecked(), self.ctrl_pressed())
 		self.update_count()
 
 	@pyqtSlot()
@@ -178,12 +182,33 @@ class DrumKitWidget(QFrame):
 
 	def saved_selections(self):
 		"""
-		Must return list of which instruments are selected (checked)
+		Returns dictionary of button states.
 		"""
-		raise NotImplemented()
+		return {
+			group_frame.group_id : {
+				'group' 		: group_frame.findChild(GroupButton).isChecked(),
+				'instruments'	: {
+					inst_button.inst_id : inst_button.isChecked() \
+					for inst_button in group_frame.findChildren(InstrumentButton)
+				}
+			}
+			for group_frame in self.findChildren(GroupFrame)
+		}
 
-	def restore_saved_selections(self, selections):
-		raise NotImplemented()
+	def apply_selections(self, selections):
+		for group_frame in self.findChildren(GroupFrame):
+			if group_frame.group_id in selections:
+				sel = selections[group_frame.group_id]
+				group_button = group_frame.findChild(GroupButton)
+				with SigBlock(group_button):
+					group_button.setChecked(sel['group'])
+				for inst_button in group_frame.findChildren(InstrumentButton):
+					if inst_button.inst_id in sel['instruments']:
+						inst_button.setChecked(sel['instruments'][inst_button.inst_id])
+					else:
+						logging.warning(f'Button "{inst_button.inst_id}" not found in project def')
+			else:
+				logging.warning(f'Group "{group_frame.group_id}" not found in project def')
 
 	@pyqtSlot(int)
 	def synth_ready(self, plugin_id):
@@ -221,6 +246,7 @@ class GroupButton(QPushButton):
 class InstrumentButton(QPushButton):
 	def __init__(self, inst, parent):
 		super().__init__(parent)
+		self.inst_id = inst.inst_id
 		self.setText(inst.name)
 		self.setCheckable(True)
 		self.setObjectName(inst.inst_id)	# InstrumentButton identified by inst_id

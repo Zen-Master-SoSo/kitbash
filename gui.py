@@ -103,7 +103,6 @@ class MainWindow(QMainWindow):
 
 	def show_hide_window_elements(self):
 		show_looper = int(self.settings.value("show_looper", 1)) == 1
-		show_looper = int(self.settings.value("show_looper", 1)) == 1
 		show_statusbar = int(self.settings.value("show_statusbar", 1)) == 1
 		if self.frm_looper:
 			self.frm_looper.setVisible(show_looper)
@@ -154,16 +153,19 @@ class MainWindow(QMainWindow):
 		if not self.options.no_audio:
 			self.start_carla_engine()
 
-	@pyqtSlot(QObject, str, int, bool, bool)
-	def slot_inst_toggle(self, source_widget, inst_id, port_number, state, ctrl_state):
+	@pyqtSlot(QObject, str, bool, bool)
+	def slot_inst_toggle(self, source_widget, inst_id, state, ctrl_state):
 		if state and not ctrl_state:
 			for drumkit_widget in self.drumkit_widgets:
 				if not drumkit_widget is source_widget:
 					drumkit_widget.deselect_instrument(inst_id)
 		elif not state:
 			source_widget.deselect_parent_group(inst_id)
-		#logging.debug(f'slot_inst_toggle {filename} {inst_id} {state}')
-		self.looper.set_mapping(MIDI_DRUM_PITCHES[inst_id], port_number if state else None)
+		if self.looper:
+			self.looper.set_mapping(
+				MIDI_DRUM_PITCHES[inst_id],
+				source_widget.port_number if state else None)
+		self.set_dirty()
 
 	# -----------------------------------------------------------------
 	# Style functions:
@@ -209,9 +211,16 @@ class MainWindow(QMainWindow):
 		raise NotImplemented()
 
 	def set_dirty(self, state=True):
-		self._dirty = state
-		title = APPLICATION_NAME if self.project_file is None else f"{self.project_file} [{APPLICATION_NAME}]"
-		self.setWindowTitle("* " + title if self._dirty else title)
+		if not self.project_loading:
+			self._dirty = state
+			title = APPLICATION_NAME if self.project_file is None else f"{self.project_file} [{APPLICATION_NAME}]"
+			self.setWindowTitle("* " + title if self._dirty else title)
+
+	def compile_project_def(self):
+		return {
+			widget.filename : widget.saved_selections() \
+			for widget in self.drumkit_widgets
+		}
 
 	def load_project(self, filename):
 		if os.path.exists(filename):
@@ -227,6 +236,17 @@ class MainWindow(QMainWindow):
 			self.settings.setValue("recent_projects", self.recent_projects.items)
 			DevilBox(f"Project not found: {filename}")
 
+	def save_project(self):
+		with open(self.project_file, 'w') as fh:
+			json.dump(self.compile_project_def(), fh, indent="\t")
+		self.register_recent_project()
+		self.set_dirty(False)
+
+	def register_recent_project(self):
+		self.recent_projects.select(self.project_file)
+		self.settings.setValue("recent_project_folder", os.path.dirname(self.project_file))
+		self.settings.setValue("recent_projects", self.recent_projects.items)
+
 	def is_clear(self):
 		return len(self.drumkit_widgets) == 0
 
@@ -236,7 +256,7 @@ class MainWindow(QMainWindow):
 		dlg = QMessageBox(
 			QMessageBox.Warning,
 			"Verify clear all",
-			"Are you sure you want to remove all existing plugins?",
+			"Are you sure you want to remove everything and start new?",
 			QMessageBox.Ok | QMessageBox.Cancel,
 			self
 		)
@@ -245,12 +265,11 @@ class MainWindow(QMainWindow):
 	def clear(self):
 		logging.debug("CLEARING")
 		for widget in reversed(self.drumkit_widgets):
-			widget.remove()
+			self.slot_remove_drumkit(widget)
 
 	def execute_project_load(self):
 		self.project_clearing = False
 		self.project_loading = True
-		self.set_dirty(False)
 		try:
 			with open(self.project_file, 'r') as fh:
 				self.project_definition = json.load(fh)
@@ -258,21 +277,20 @@ class MainWindow(QMainWindow):
 			DevilBox('There was a problem decoding "{0}"' + \
 				'\nAre you sure it is a kitbash project?'.format(self.project_file))
 		else:
-			self.recent_projects.select(self.project_file)
-			self.settings.setValue("recent_project_folder", os.path.dirname(self.project_file))
-			self.settings.setValue("recent_projects", self.recent_projects.items)
-			for drumkit in self.project_definition:
-				self.load_drumkit(drumkit.sfz_filename)
+			self.register_recent_project()
+			for filename in self.project_definition.keys():
+				self.load_drumkit(filename)
 
 	def check_project_load_complete(self):
 		"""
-		Determine if project loading is finished, reset "self.project_loading".
-		Returns True if finished
+		Determine if project loading is complete, reset "self.project_loading".
+		Returns True if complete
 		"""
 		for widget in self.drumkit_widgets:
 			if widget.drumkit is None:
 				return False
 		self.project_loading = False
+		self.set_dirty(False)
 		return True
 
 	def load_drumkit(self, filename):
@@ -287,6 +305,7 @@ class MainWindow(QMainWindow):
 			self.threadpool.start(worker)
 			self.recent_drumkits.select(filename)
 			self.settings.setValue("recent_drumkit_folder", os.path.dirname(filename))
+			self.set_dirty()
 		else:
 			self.recent_drumkits.remove(filename)
 			DevilBox(f"File not found: {filename}")
@@ -301,7 +320,7 @@ class MainWindow(QMainWindow):
 		drumkit_widget.drumkit_loaded()
 		self.action_CollapseKits.setEnabled(True)
 		if self.project_loading:
-			drumkit_widget.apply_selections(self.project_definition[drumkit.filename])
+			drumkit_widget.apply_selections(self.project_definition[drumkit_widget.filename])
 			self.check_project_load_complete()
 
 	@pyqtSlot(QObject)
@@ -316,10 +335,12 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(QObject)
 	def slot_remove_drumkit(self, drumkit_widget):
-		self.looper.delete_port(drumkit_widget.port_number)
+		if self.looper:
+			self.looper.delete_port(drumkit_widget.port_number)
+			drumkit_widget.synth.delete()
 		self.drumkit_widgets.remove(drumkit_widget)
-		drumkit_widget.synth.delete()
 		drumkit_widget.deleteLater()
+		self.set_dirty()
 
 	def drumkit_widget(self, filename):
 		for widget in self.drumkit_widgets:
@@ -434,9 +455,7 @@ class MainWindow(QMainWindow):
 				self.project_file = filename
 			else:
 				return
-		with open(self.project_file, 'w') as fh:
-			json.dump(self.compile_sfz_parts(), fh, indent="\t")
-			self.set_dirty(False)
+		self.save_project()
 
 	@pyqtSlot()
 	def action_load_kit(self):
@@ -557,10 +576,6 @@ class MainWindow(QMainWindow):
 			self._cancel_action_dialog.show()
 		else:
 			self._cancel_action_dialog = None
-
-	@pyqtSlot()
-	def slot_ProjectLoadFinished(self):
-		logging.debug("project loading finished")
 
 	@pyqtSlot(str)
 	def slot_Info(self, info):
