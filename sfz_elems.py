@@ -7,6 +7,7 @@ Classes which are instantiated when parsing an .sfz file.
 All of these classes are constructed from a lark parser tree Token.
 """
 import os, logging, re
+from functools import cached_property
 from appdirs import user_cache_dir
 from lark import Lark, Transformer, v_args
 from kitbash.opcodes import OPCODES
@@ -90,9 +91,9 @@ class _Header(_SFZElem):
 	def inherited_opcodes(self):
 		"""
 		Returns all the opcodes defined in this header with all opcodes defined in its
-		parent header, recursively.
+		parent header, recursively. Opcodes defined in this header override parent's.
 		"""
-		return dict(self._opcodes, **self._parent.inherited_opcodes())
+		return dict(self._parent.inherited_opcodes(), **self._opcodes)
 
 	def regions(self):
 		"""
@@ -128,7 +129,10 @@ class _Header(_SFZElem):
 		return self.subheaders
 
 	def __repr__(self):
-		return '%-4d %s #%s (%d opcodes)' % (self.line, type(self).__name__, self._idx, len(self._opcodes))
+		return '%-4d| %s #%s (%d opcodes)' % (self.line, type(self).__name__, self._idx, len(self._opcodes))
+
+	def __str__(self):
+		return '<%s>' % type(self).__name__.lower()
 
 	def write(self, stream):
 		"""
@@ -136,7 +140,7 @@ class _Header(_SFZElem):
 		opcodes to .sfz format.
 		"stream" may be any file-like object, including sys.stdout.
 		"""
-		stream.write('<%s>\n' % type(self).__name__.lower())
+		stream.write(str(self) + "\n")
 		opcodes = self._opcodes.values()
 		if opcodes:
 			for op in self._opcodes.values():
@@ -212,15 +216,18 @@ class Curve(_Header):
 	points = {}
 
 	def __repr__(self):
-		return '%-4d %s #%s curve_index %s (%d points)' % \
+		return '%-4d| %s #%s curve_index %s (%d points)' % \
 			(self.line, type(self).__name__, self._idx, self.curve_index, len(self.points))
+
+	def __str__(self):
+		return '<%s>curve_index=%s' % (type(self).__name__.lower(), self.curve_index)
 
 	def write(self, stream):
 		"""
 		Exports this Curve to .sfz format.
 		"stream" may be any file-like object, including sys.stdout.
 		"""
-		stream.write('<%s>curve_index=%s\n' % (type(self).__name__.lower(), self.curve_index))
+		stream.write(str(self) + "\n")
 		for vals in self.points.items():
 			stream.write('%s=%s\n' % vals)
 
@@ -230,23 +237,58 @@ class Opcode(_SFZElem):
 	def __init__(self, name, value, meta):
 		super().__init__(meta)
 		self.name = name
-		self.value = value
 		self._parsed_value = value
-		odef = OPCODES[self.name] \
+
+	@cached_property
+	def value(self):
+		"""
+		Returns the value as the type defined in the opcode definition.
+		"""
+		if self.type == 'float':
+			return float(self._parsed_value)
+		elif self.type == 'integer':
+			return int(self._parsed_value)
+		return self._parsed_value
+
+	@cached_property
+	def type(self):
+		"""
+		Returns the type defined in the opcode definition.
+		"""
+		return self._def_value('type')
+
+	@cached_property
+	def unit(self):
+		"""
+		Returns the unit defined in the opcode definition.
+		"""
+		return self._def_value('unit')
+
+	@cached_property
+	def valid(self):
+		"""
+		Returns the validation rule defined in the opcode definition.
+		"""
+		return self._def_value('valid')
+
+	@cached_property
+	def definition(self):
+		"""
+		Returns the defintion of this opcode from the SFZ syntax (see opcodes.py)
+		The defintion name is normalized, replacing "_ccN" -type elements.
+		"""
+		return OPCODES[self.name] \
 			if self.name in OPCODES \
 			else self._get_opcode_def(self.name)
-		if odef is None or 'value' not in odef:
-			self.unit = None
-			self.type = None
-			self.valid = None
-		else:
-			self.unit = odef['value']['unit'] if 'unit' in odef['value'] else None
-			self.type = odef['value']['type'] if 'type' in odef['value'] else None
-			self.valid = odef['value']['valid'] if 'valid' in odef['value'] else None
-		if self.type == 'float':
-			self.value = float(self.value)
-		elif self.type == 'integer':
-			self.value = int(self.value)
+
+	def _def_value(self, key):
+		"""
+		Returns the attribute of the opcode defintion.value, if defined,
+		returns None if not.
+		"""
+		return None \
+			if self.definition is None or 'value' not in self.definition \
+			else self.definition['value'][key]
 
 	def _get_opcode_def(self, name):
 		"""
@@ -280,14 +322,17 @@ class Opcode(_SFZElem):
 		logging.warning('Could not find opcode ' + name)
 
 	def __repr__(self):
-		return '%-4d opcode #%d: "%s" = %s' % (self.line, self._idx, self.name, repr(self.value))
+		return '%-4d| opcode #%d: "%s" = %s' % (self.line, self._idx, self.name, repr(self.value))
+
+	def __str__(self):
+		return '%s=%s' % (self.name, self._parsed_value)
 
 	def write(self, stream):
 		"""
 		Exports this Opcode to .sfz format.
 		"stream" may be any file-like object, including sys.stdout.
 		"""
-		stream.write('%s=%s\n' % (self.name, self._parsed_value))
+		stream.write(str(self) + "\n")
 
 
 class Define(_Modifier):
@@ -298,7 +343,7 @@ class Define(_Modifier):
 		self.value = value
 
 	def __repr__(self):
-		return '%-4d define #%d: %s = %s' % (self.line, self._idx, self.varname, self.value)
+		return '%-4d| define #%d: %s = %s' % (self.line, self._idx, self.varname, self.value)
 
 
 class Include(_Modifier):
@@ -308,7 +353,7 @@ class Include(_Modifier):
 		self.path = path
 
 	def __repr__(self):
-		return '%-4d include #%d: %s' % (self.line, self._idx, self.path)
+		return '%-4d| include #%d: %s' % (self.line, self._idx, self.path)
 
 
 #  end kitbash/sfz_elems.py

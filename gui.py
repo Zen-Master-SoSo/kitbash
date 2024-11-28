@@ -286,9 +286,8 @@ class MainWindow(QMainWindow):
 		Determine if project loading is complete, reset "self.project_loading".
 		Returns True if complete
 		"""
-		for widget in self.drumkit_widgets:
-			if widget.drumkit is None:
-				return False
+		if any(widget is None for widget in self.drumkit_widgets):
+			return False
 		self.project_loading = False
 		self.set_dirty(False)
 		return True

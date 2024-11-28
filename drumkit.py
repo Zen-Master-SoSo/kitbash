@@ -2,31 +2,86 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
-from os import path
+"""
+Provides percussion group / instrument oriented wrapper for SFZ classes.
+
+Notes:
+When importing
+"""
+from os.path import basename
 from copy import deepcopy
+from functools import cached_property
+from functools import reduce
 from midi_notes import Note, MIDI_DRUM_PITCHES, MIDI_DRUM_NAMES, MIDI_DRUM_IDS
+from kitbash.sfz import COMMENT_DIVIDER
 from kitbash.sfz import SFZ
+from kitbash.sfz_elems import Global as SFZGlobal
+from kitbash.sfz_elems import Group as SFZGroup
+from kitbash.sfz_elems import Region as SFZRegion
+
+class Global(SFZGlobal):
+	pass
+
+class Group(SFZGroup):
+	pass
+
+class Region(SFZRegion):
+
+	def __init__(self, source_region, source_filename):
+		self.subheaders = []
+		self._opcodes = source_region.inherited_opcodes()
+		self.filename = source_filename
+		self.line = source_region.line
+		self.column = source_region.column
+		self.end_line = source_region.end_line
+		self.end_column = source_region.end_column
+
+	@cached_property
+	def opstrs(self):
+		"""
+		Returns a list of all the string representation (including name and value) of
+		all the opcodes which are used by this Region. That includes opcodes defined in
+		this Region as well as opcodes inherited from container groups, such as Group,
+		Master, and Global groups.
+		"""
+		return [str(opcode) for opcode in self._opcodes.values()]
+
+	def uses_opstr(self, opstr):
+		"""
+		Returns True if the given string representation (including name and value) of
+		an opcode is used by this Region. Checks opcodes defined in this Region as well
+		as opcodes inherited from container groups, such as Group, Master, and Global
+		groups.
+		Note that opcode name AND value must match.
+		"""
+		return opstr in self.opstrs
+
+	def __repr__(self):
+		return 'Region: %s, line %d (%d opcodes)' % (
+			basename(self.filename),
+			self.line,
+			len(self._opcodes)
+		)
 
 
 class PercussionInstrument:
+	"""
+	Reresents a single instrument trigerred by a single MIDI note number.
+	When importing from an SFZ, this class contains the regions that define the
+	sound of the instrument.
+	"""
 
 	def __init__(self, pitch, regions, filename):
 		"""
+		Used when importing from an SFZ
 		pitch:		(int)	MIDI note number
-		regions:	(list)	"region" header and contained opcodes from SFZ
-		filename:	(str)	Filename from the source SFZ
+		regions:	(list)	Region headers from source SFZ
+		filename:	(str)	Filename from source SFZ
 		"""
 		self.note = Note(pitch)
-		self.regions = regions
-		self.source_filename = filename
+		self.regions = [ Region(region, filename) for region in regions ]
 		self.inst_id = MIDI_DRUM_IDS[pitch]
 		self.name = MIDI_DRUM_NAMES[pitch]
-
-	def import_regions_from(self, sfz):
-		"""
-		Does a deep copy from the given SFZ of all regions used by this instrument.
-		"""
-		self.regions.extend(list(sfz.regions_for(lokey=self.note.pitch, hikey=self.note.pitch)))
 
 	@property
 	def pitch(self):
@@ -44,20 +99,36 @@ class PercussionInstrument:
 		"""
 		Write in SFZ format to any file-like object, including sys.stdout
 		"""
-		stream.write(f'// "{self.name}"\n')
+		stream.write(f'// {self.name}\n')
 		stream.write(f'// MIDI pitch: {self.note.pitch}  Note name: {self.note}\n')
 		stream.write(f'// Source file: {self.source_filename}\n\n')
 		for region in self.regions:
 			region.write(stream)
 
 	def opcodes_used(self):
-		a = []
-		for region in self.regions:
-			a.extend(list(region.opcodes.keys()))
-		return set(a)
+		"""
+		Returns a set of all the string representation (including name and value) of
+		all the opcodes used in this Instrument.
+		"""
+		return reduce(
+			lambda a,b: set(a) | set(b),
+			[region.opstrs for region in self.regions]
+		)
 
-	def uses_opcode(self, opname):
-		return opname in self.opcodes_used()
+	def regions_using_opcode(self, opstr):
+		"""
+		Generator function which yields each Region which uses the opcode specified.
+		opstr: the string representation (including name and value) of an opcode.
+		"""
+		for region in self.regions:
+			if region.uses_opstr(opstr):
+				yield region
+
+	def common_opcodes(self):
+		return reduce(
+			lambda a,b: set(a) & set(b),
+			[region.opstrs for region in self.regions]
+		)
 
 
 class PercussionGroup:
@@ -76,40 +147,39 @@ class PercussionGroup:
 		"""
 		self.instruments[pitch] = PercussionInstrument(pitch, regions, filename)
 
-	def import_regions_from(self, sfz):
-		"""
-		Does a deep copy from the given SFZ of all instruments in this group.
-		"""
-		for inst in self.instruments.values():
-			inst.import_regions_from(sfz)
-
 	def empty(self):
 		"""
 		Returns True if not containing any instruments, or contained instruments
 		contain no Region -type headers.
 		"""
-		for inst in self.instruments.values():
-			if not inst.empty():
-				return False
-		return True
+		return all(inst.empty() for inst in self.instruments.values())
 
 	def write(self, stream):
 		"""
 		Write in SFZ format to any file-like object, including sys.stdout
 		"""
-		stream.write(f'\n// Percussion group "{self.name}"\n\n')
+		stream.write(f'{COMMENT_DIVIDER}// Percussion group "{self.name}"\n\n')
 		for inst in self.instruments.values():
 			if not inst.empty():
 				inst.write(stream)
 
 	def opcodes_used(self):
+		"""
+		Returns a set of all the string representation (including name and value) of
+		all the opcodes used in this Group.
+		"""
 		a = []
 		for inst in self.instruments.values():
 			a.extend(inst.opcodes_used())
 		return set(a)
 
-	def uses_opcode(self, opname):
-		return opname in self.opcodes_used()
+	def regions_using_opcode(self, opstr):
+		"""
+		Generator function which yields each Region which uses the opcode specified.
+		opstr: the string representation (including name and value) of an opcode.
+		"""
+		for instrument in self.instruments.values():
+			yield from instrument.regions_using_opcode(opstr)
 
 
 class Drumkit:
@@ -190,7 +260,7 @@ class Drumkit:
 		if self.filename is None:
 			self.name = '[unnamed drumkit]'
 		else:
-			self.name = path.basename(filename)
+			self.name = basename(filename)
 			sfz = SFZ(self.filename)
 			for pitch, group_id in Drumkit.pitch_groups.items():
 				regions = list(sfz.regions_for(lokey=pitch, hikey=pitch))
@@ -203,7 +273,7 @@ class Drumkit:
 		"""
 		Write in SFZ format to any file-like object, including sys.stdout
 		"""
-		stream.write(f'// ----------------------------------------\n//   {self.name}\n// ----------------------------------------\n\n')
+		stream.write(f'{COMMENT_DIVIDER}// {self.name}\n{COMMENT_DIVIDER}\n')
 		for group in self.groups.values():
 			if not group.empty():
 				group.write(stream)
@@ -225,35 +295,58 @@ class Drumkit:
 		pitch:		(int)		MIDI note number of the instrument to copy.
 		source_kit	(Drumkit)	Source to copy from
 		"""
-		if isinstance(pitch, int):
-			inst_id = MIDI_DRUM_IDS[pitch]
-		elif pitch in MIDI_DRUM_PITCHES:
-			inst_id = pitch
-			pitch = MIDI_DRUM_PITCHES[inst_id]
-		else:
-			raise ValueError()
-		group_id = Drumkit.pitch_groups[pitch]
-		if not group_id in source_kit.groups:
-			raise Exception(f'Source kit "{source_kit}" does not have a "{group_id}" group')
-		source_group = source_kit.groups[group_id]
-		if not pitch in source_group.instruments:
-			raise Exception(f'Source kit "{source_kit}" group "{group_id}" does not have a "{inst_id}" instrument')
-		if group_id not in self.groups:
-			self.groups[group_id] = PercussionGroup(group_id)
-		self.groups[group_id].instruments[pitch] = deepcopy(source_kit.groups[group_id].instruments[pitch])
+		pitch, inst_id = self.instrument_ids(pitch)
+		self.groups[group_id].instruments[pitch] = deepcopy(source_kit.instrument(pitch))
 
 	def opcodes_used(self):
+		"""
+		Returns a set of all the string representation (including name and value) of
+		all the opcodes used in this Drumkit
+		"""
 		a = []
 		for group in self.groups.values():
 			a.extend(group.opcodes_used())
 		return set(a)
 
+	def regions_using_opcode(self, opstr):
+		"""
+		Generator function which yields each Region which uses the opcode specified.
+		opcode: the string representation (including name and value) of an opcode.
+		"""
+		for group in self.groups.values():
+			yield from group.regions_using_opcode(opstr)
+
 	def opcode_usage(self):
+		"""
+		Returns a dict pf lists, each item's key being the representaion of the opcode,
+		(including name and value) and value a list of regions where it is used.
+		"""
 		return {
-			opname:[
-				group_id for group_id in self.groups.keys() if self.groups[group_id].uses_opcode(opname)
-			] for opname in self.opcodes_used()
+			opstr:list(self.regions_using_opcode(opstr)) \
+			for opstr in self.opcodes_used()
 		}
+
+	def instrument_ids(self, arg):
+		"""
+		Returns tuple:
+			(int) pitch
+			(str) instrument_id
+		"""
+		if arg in MIDI_DRUM_IDS:
+			return arg, MIDI_DRUM_IDS[arg]
+		elif arg in MIDI_DRUM_PITCHES:
+			return MIDI_DRUM_PITCHES[arg], arg
+		else:
+			raise ValueError()
+
+	def instrument(self, arg):
+		pitch, inst_id = self.instrument_ids(arg)
+		group_id = self.pitch_groups[pitch]
+		if group_id not in self.groups:
+			raise IndexError(group_id)
+		if pitch not in self.groups[group_id].instruments:
+			raise IndexError(pitch)
+		return self.groups[group_id].instruments[pitch]
 
 	def __str__(self):
 		return f"<Drumkit {self.filename}>"
