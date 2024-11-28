@@ -102,8 +102,9 @@ class DrumKitWidget(QFrame):
 		Called when KitLoader is finshed loading and interpreted SFZ.
 		KitLoader sets the "drumkit" attribute of this widget.
 		"""
-		for group in self.drumkit.percussion_groups:
+		for group in self.drumkit.groups.values():
 			if group.empty():
+				logging.warning('Empty percussing group: ' + group.group_id)
 				continue
 			group_frame = GroupFrame(group, self)
 			group_frame.group_id = group.group_id
