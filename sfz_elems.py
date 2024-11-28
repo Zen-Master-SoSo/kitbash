@@ -68,8 +68,8 @@ class _Header(_SFZElem):
 
 	def _may_contain(self, header):
 		"""
-		This function is used when determining if a header declared in an .sfz file is
-		a child of the header currently being parsed.
+		This function is used to determine if a header being parsed is a child of the
+		last previous header, or the start of an entirely new header group.
 		"""
 		return False
 

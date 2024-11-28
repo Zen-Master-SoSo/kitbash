@@ -8,6 +8,7 @@ Provides an object-oriented interface to an .sfz file via the SFZ class.
 import os, logging, re
 from appdirs import user_cache_dir
 from lark import Lark, Transformer, v_args
+from lark.tree import Meta
 from kitbash.opcodes import OPCODES
 from kitbash.sfz_elems import (
 	_SFZElem,
@@ -36,10 +37,16 @@ class SFZXformer(Transformer):
 		self.current_header = self.sfz
 
 	@v_args(meta=True)
-	def header(self, toks, meta):
+	def header(self, arg1, arg2):
 		"""
 		Transformer function which handles <header> tokens.
 		"""
+		if isinstance(arg1, Meta):
+			meta = arg1
+			toks = arg2
+		else:
+			meta = arg2
+			toks = arg1
 		if toks[0].value == 'region':
 			header = Region(toks, meta)
 		elif toks[0].value == 'group':
@@ -62,17 +69,29 @@ class SFZXformer(Transformer):
 		self.current_header = header
 
 	@v_args(meta=True)
-	def define_macro(self, toks, meta):
+	def define_macro(self, arg1, arg2):
 		"""
 		Transformer function which handles <define> tokens.
 		"""
+		if isinstance(arg1, Meta):
+			meta = arg1
+			toks = arg2
+		else:
+			meta = arg2
+			toks = arg1
 		self.sfz.defines[toks[0].value] = Define(toks[0].value, toks[1].value, meta)
 
 	@v_args(meta=True)
-	def include_macro(self, toks, meta):
+	def include_macro(self, arg1, arg2):
 		"""
 		Transformer function which handles <include> tokens.
 		"""
+		if isinstance(arg1, Meta):
+			meta = arg1
+			toks = arg2
+		else:
+			meta = arg2
+			toks = arg1
 		include = Include(self.unquote(self.replace_defs(toks[0].value)), meta)
 		self.sfz.includes.append(include)
 		path = os.path.join(os.path.dirname(self.sfz.filename), include.path)
@@ -92,10 +111,16 @@ class SFZXformer(Transformer):
 				logging.error('%s: %s' % (type(e).__name__, str(e))),
 
 	@v_args(meta=True)
-	def opcode_exp(self, toks, meta):
+	def opcode_exp(self, arg1, arg2):
 		"""
 		Transformer function which handles <opcode> tokens.
 		"""
+		if isinstance(arg1, Meta):
+			meta = arg1
+			toks = arg2
+		else:
+			meta = arg2
+			toks = arg1
 		if isinstance(self.current_header, Curve):
 			if toks[0] == 'curve_index':
 				self.current_header.curve_index = toks[1].value
@@ -112,7 +137,7 @@ class SFZXformer(Transformer):
 				meta))
 
 	@v_args(meta=True)
-	def start(self, toks, meta):
+	def start(self, arg1, arg2):
 		"""
 		Transformer function which handles the root of the sfz.
 		"""
