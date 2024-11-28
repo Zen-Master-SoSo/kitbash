@@ -11,6 +11,11 @@ from kitbash.sfz import SFZ
 class PercussionInstrument:
 
 	def __init__(self, pitch, regions, filename):
+		"""
+		pitch:		(int)	MIDI note number
+		regions:	(list)	"region" header and contained opcodes from SFZ
+		filename:	(str)	Filename from the source SFZ
+		"""
 		self.note = Note(pitch)
 		self.regions = regions
 		self.source_filename = filename
@@ -18,21 +23,41 @@ class PercussionInstrument:
 		self.name = MIDI_DRUM_NAMES[pitch]
 
 	def import_regions_from(self, sfz):
+		"""
+		Does a deep copy from the given SFZ of all regions used by this instrument.
+		"""
 		self.regions.extend(list(sfz.regions_for(lokey=self.note.pitch, hikey=self.note.pitch)))
 
 	@property
 	def pitch(self):
+		"""
+		Returns (int) MIDI note number.
+		To retrieve in a differnt format, use the .note attribute, which is an instance
+		of midi_notes.Note.
+		"""
 		return self.note.pitch
 
 	def empty(self):
 		return len(self.regions) == 0
 
 	def write(self, stream):
+		"""
+		Write in SFZ format to any file-like object, including sys.stdout
+		"""
 		stream.write(f'// "{self.name}"\n')
 		stream.write(f'// MIDI pitch: {self.note.pitch}  Note name: {self.note}\n')
 		stream.write(f'// Source file: {self.source_filename}\n\n')
 		for region in self.regions:
 			region.write(stream)
+
+	def opcodes_used(self):
+		a = []
+		for region in self.regions:
+			a.extend(list(region.opcodes.keys()))
+		return set(a)
+
+	def uses_opcode(self, opname):
+		return opname in self.opcodes_used()
 
 
 class PercussionGroup:
@@ -43,23 +68,48 @@ class PercussionGroup:
 		self.instruments = { }
 
 	def append_instrument(self, pitch, regions, filename):
+		"""
+		Adds orreplaces an instrument in this group.
+		pitch:		(int)	MIDI note number
+		regions:	(list)	"region" header and contained opcodes from SFZ
+		filename:	(str)	Filename from the source SFZ
+		"""
 		self.instruments[pitch] = PercussionInstrument(pitch, regions, filename)
 
 	def import_regions_from(self, sfz):
+		"""
+		Does a deep copy from the given SFZ of all instruments in this group.
+		"""
 		for inst in self.instruments.values():
 			inst.import_regions_from(sfz)
 
 	def empty(self):
+		"""
+		Returns True if not containing any instruments, or contained instruments
+		contain no Region -type headers.
+		"""
 		for inst in self.instruments.values():
 			if not inst.empty():
 				return False
 		return True
 
 	def write(self, stream):
+		"""
+		Write in SFZ format to any file-like object, including sys.stdout
+		"""
 		stream.write(f'\n// Percussion group "{self.name}"\n\n')
 		for inst in self.instruments.values():
 			if not inst.empty():
 				inst.write(stream)
+
+	def opcodes_used(self):
+		a = []
+		for inst in self.instruments.values():
+			a.extend(inst.opcodes_used())
+		return set(a)
+
+	def uses_opcode(self, opname):
+		return opname in self.opcodes_used()
 
 
 class Drumkit:
@@ -150,15 +200,31 @@ class Drumkit:
 					self.groups[group_id].append_instrument(pitch, regions, filename)
 
 	def write(self, stream):
+		"""
+		Write in SFZ format to any file-like object, including sys.stdout
+		"""
 		stream.write(f'// ----------------------------------------\n//   {self.name}\n// ----------------------------------------\n\n')
 		for group in self.groups.values():
 			if not group.empty():
 				group.write(stream)
 
 	def import_group(self, group_id, source_kit):
+		"""
+		Do a deep copy from the given Drumkit, of the specified group.
+		group_id:	(str)		Group ID, as from Drumkit.group_pitches
+		source_kit	(Drumkit)	Source to copy from
+		"""
+		if not group_id in source_kit.groups:
+			raise Exception(f'Source kit "{source_kit}" does not have a "{group_id}" group')
 		self.groups[group_id] = deepcopy(source_kit.groups[group_id])
 
 	def import_instrument(self, pitch, source_kit):
+		"""
+		Do a deep copy from the given Drumkit, of the instrument tied to the spectfied
+		pitch.
+		pitch:		(int)		MIDI note number of the instrument to copy.
+		source_kit	(Drumkit)	Source to copy from
+		"""
 		if isinstance(pitch, int):
 			inst_id = MIDI_DRUM_IDS[pitch]
 		elif pitch in MIDI_DRUM_PITCHES:
@@ -175,6 +241,19 @@ class Drumkit:
 		if group_id not in self.groups:
 			self.groups[group_id] = PercussionGroup(group_id)
 		self.groups[group_id].instruments[pitch] = deepcopy(source_kit.groups[group_id].instruments[pitch])
+
+	def opcodes_used(self):
+		a = []
+		for group in self.groups.values():
+			a.extend(group.opcodes_used())
+		return set(a)
+
+	def opcode_usage(self):
+		return {
+			opname:[
+				group_id for group_id in self.groups.keys() if self.groups[group_id].uses_opcode(opname)
+			] for opname in self.opcodes_used()
+		}
 
 	def __str__(self):
 		return f"<Drumkit {self.filename}>"
