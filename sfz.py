@@ -135,20 +135,21 @@ class SFZ(_Header):
 
 	_parser = None
 
-	def __init__(self, filename):
-		if SFZ._parser is None:
-			cache_file = os.path.join(user_cache_dir(), 'kitbash')
-			grammar = os.path.join(os.path.dirname(__file__), 'res', 'sfz.lark')
-			SFZ._parser = Lark.open(grammar, parser='lalr', propagate_positions=True, cache=cache_file)
-		with open(filename) as f:
-			tree = SFZ._parser.parse(f.read() + "\n")
+	def __init__(self, filename = None):
 		self.filename = filename
 		self._parent = None
 		self.defines = {}
 		self.includes = []
 		self.subheaders = []
-		xformer = SFZXformer(self)
-		xformer.transform(tree)
+		if filename is not None:
+			if SFZ._parser is None:
+				cache_file = os.path.join(user_cache_dir(), 'kitbash')
+				grammar = os.path.join(os.path.dirname(__file__), 'res', 'sfz.lark')
+				SFZ._parser = Lark.open(grammar, parser='lalr', propagate_positions=True, cache=cache_file)
+			with open(filename) as f:
+				tree = SFZ._parser.parse(f.read() + "\n")
+			xformer = SFZXformer(self)
+			xformer.transform(tree)
 
 	def _may_contain(self, header):
 		return True
