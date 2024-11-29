@@ -10,8 +10,8 @@ When importing
 """
 from os.path import basename
 from copy import deepcopy
-from functools import cached_property
 from functools import reduce
+from operator import and_, or_
 from midi_notes import Note, MIDI_DRUM_PITCHES, MIDI_DRUM_NAMES, MIDI_DRUM_IDS
 from kitbash.sfz import COMMENT_DIVIDER
 from kitbash.sfz import SFZ
@@ -19,11 +19,14 @@ from kitbash.sfz_elems import Global as SFZGlobal
 from kitbash.sfz_elems import Group as SFZGroup
 from kitbash.sfz_elems import Region as SFZRegion
 
+
 class Global(SFZGlobal):
 	pass
 
+
 class Group(SFZGroup):
 	pass
+
 
 class Region(SFZRegion):
 
@@ -36,32 +39,25 @@ class Region(SFZRegion):
 		self.end_line = source_region.end_line
 		self.end_column = source_region.end_column
 
-	@cached_property
-	def opstrs(self):
-		"""
-		Returns a list of all the string representation (including name and value) of
-		all the opcodes which are used by this Region. That includes opcodes defined in
-		this Region as well as opcodes inherited from container groups, such as Group,
-		Master, and Global groups.
-		"""
-		return [str(opcode) for opcode in self._opcodes.values()]
-
-	def uses_opstr(self, opstr):
-		"""
-		Returns True if the given string representation (including name and value) of
-		an opcode is used by this Region. Checks opcodes defined in this Region as well
-		as opcodes inherited from container groups, such as Group, Master, and Global
-		groups.
-		Note that opcode name AND value must match.
-		"""
-		return opstr in self.opstrs
-
 	def __repr__(self):
 		return 'Region: %s, line %d (%d opcodes)' % (
 			basename(self.filename),
 			self.line,
 			len(self._opcodes)
 		)
+
+	def write(self, stream, exclude_opstrs):
+		"""
+		Write in SFZ format to any file-like object, including sys.stdout.
+
+		"exclude_opstrs" is a set of string representations (including name and value)
+		of all the opcodes NOT to define in this region, as they are common opcodes
+		defined in a parent header.
+		"""
+		stream.write("<region>\n")
+		for opstr in self.opstrs - exclude_opstrs:
+			stream.write(opstr + '\n')
+		stream.write('\n')
 
 
 class PercussionInstrument:
@@ -79,9 +75,10 @@ class PercussionInstrument:
 		filename:	(str)	Filename from source SFZ
 		"""
 		self.note = Note(pitch)
-		self.regions = [ Region(region, filename) for region in regions ]
 		self.inst_id = MIDI_DRUM_IDS[pitch]
 		self.name = MIDI_DRUM_NAMES[pitch]
+		self.regions = [ Region(region, filename) for region in regions ]
+		self.source_filename = filename
 
 	@property
 	def pitch(self):
@@ -93,27 +90,47 @@ class PercussionInstrument:
 		return self.note.pitch
 
 	def empty(self):
+		"""
+		Returns True if there are no regions defined for this Instrument's pitch
+		"""
 		return len(self.regions) == 0
 
-	def write(self, stream):
+	def write(self, stream, exclude_opstrs):
 		"""
 		Write in SFZ format to any file-like object, including sys.stdout
+
+		"exclude_opstrs" is a set of string representations (including name and value)
+		of all the opcodes NOT to define in this region, as they are common opcodes
+		defined in a parent header.
 		"""
 		stream.write(f'// {self.name}\n')
 		stream.write(f'// MIDI pitch: {self.note.pitch}  Note name: {self.note}\n')
 		stream.write(f'// Source file: {self.source_filename}\n\n')
+		if len(self.regions) > 1:
+			common_opstrings = self.common_opstrings()
+			group_opcodes = common_opstrings - exclude_opstrs
+			if group_opcodes:
+				stream.write('<group>\n')
+				for opstr in group_opcodes:
+					stream.write(opstr + '\n')
+				stream.write('\n')
+			exclude_opstrs |= group_opcodes
 		for region in self.regions:
-			region.write(stream)
+			region.write(stream, exclude_opstrs)
 
 	def opcodes_used(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the opcodes used in this Instrument.
 		"""
-		return reduce(
-			lambda a,b: set(a) | set(b),
-			[region.opstrs for region in self.regions]
-		)
+		return reduce(or_, [region.opstrs for region in self.regions])
+
+	def common_opstrings(self):
+		"""
+		Returns a set of all the string representation (including name and value) of
+		all the identical opcodes used in every region in this Instrument.
+		"""
+		return reduce(and_, [region.opstrs for region in self.regions])
 
 	def regions_using_opcode(self, opstr):
 		"""
@@ -124,11 +141,12 @@ class PercussionInstrument:
 			if region.uses_opstr(opstr):
 				yield region
 
-	def common_opcodes(self):
-		return reduce(
-			lambda a,b: set(a) & set(b),
-			[region.opstrs for region in self.regions]
-		)
+	def samples(self):
+		"""
+		Returns a list of the parsed values of all the "sample" opcodes contained in
+		the regions defined for this Instrument.
+		"""
+		return [ region.sample for region in self.regions if region.sample is not None ]
 
 
 class PercussionGroup:
@@ -154,24 +172,32 @@ class PercussionGroup:
 		"""
 		return all(inst.empty() for inst in self.instruments.values())
 
-	def write(self, stream):
+	def write(self, stream, exclude_opstrs):
 		"""
 		Write in SFZ format to any file-like object, including sys.stdout
+
+		"exclude_opstrs" is a set of string representations (including name and value)
+		of all the opcodes NOT to define in this region, as they are common opcodes
+		defined in a parent header.
 		"""
-		stream.write(f'{COMMENT_DIVIDER}// Percussion group "{self.name}"\n\n')
+		stream.write(f'{COMMENT_DIVIDER}// {self.name}\n\n')
 		for inst in self.instruments.values():
 			if not inst.empty():
-				inst.write(stream)
+				inst.write(stream, exclude_opstrs)
 
 	def opcodes_used(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
-		all the opcodes used in this Group.
+		all the opcodes used by all Instruments in this Group.
 		"""
-		a = []
-		for inst in self.instruments.values():
-			a.extend(inst.opcodes_used())
-		return set(a)
+		return reduce(or_, [instrument.opcodes_used() for instrument in self.instruments.values()])
+
+	def common_opstrings(self):
+		"""
+		Returns a set of all the string representation (including name and value) of
+		all the identical opcodes used in every region in this Group.
+		"""
+		return reduce(and_, [instrument.opcodes_used() for instrument in self.instruments.values()])
 
 	def regions_using_opcode(self, opstr):
 		"""
@@ -180,6 +206,16 @@ class PercussionGroup:
 		"""
 		for instrument in self.instruments.values():
 			yield from instrument.regions_using_opcode(opstr)
+
+	def samples(self):
+		"""
+		Returns a list of the parsed values of all the "sample" opcodes contained in
+		the regions defined for this Instrument.
+		"""
+		return reduce(
+			lambda a,b: set(a) | set(b),
+			[ instrument.samples() for instrument in self.instruments.values() ]
+		)
 
 
 class Drumkit:
@@ -274,9 +310,15 @@ class Drumkit:
 		Write in SFZ format to any file-like object, including sys.stdout
 		"""
 		stream.write(f'{COMMENT_DIVIDER}// {self.name}\n{COMMENT_DIVIDER}\n')
+		global_opcodes = self.common_opstrings()
+		if global_opcodes:
+			stream.write('<global>\n')
+			for opstr in global_opcodes:
+				stream.write(opstr + '\n')
+			stream.write('\n')
 		for group in self.groups.values():
 			if not group.empty():
-				group.write(stream)
+				group.write(stream, global_opcodes)
 
 	def import_group(self, group_id, source_kit):
 		"""
@@ -296,17 +338,22 @@ class Drumkit:
 		source_kit	(Drumkit)	Source to copy from
 		"""
 		pitch, inst_id = self.instrument_ids(pitch)
-		self.groups[group_id].instruments[pitch] = deepcopy(source_kit.instrument(pitch))
+		self.groups[self.pitch_groups[pitch]].instruments[pitch] = \
+			deepcopy(source_kit.instrument(pitch))
 
 	def opcodes_used(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the opcodes used in this Drumkit
 		"""
-		a = []
-		for group in self.groups.values():
-			a.extend(group.opcodes_used())
-		return set(a)
+		return reduce(or_, [group.opcodes_used() for group in self.groups.values()])
+
+	def common_opstrings(self):
+		"""
+		Returns a set of all the string representation (including name and value) of
+		all the identical opcodes used in every region in this Drumki.
+		"""
+		return reduce(and_, [group.opcodes_used() for group in self.groups.values()])
 
 	def regions_using_opcode(self, opstr):
 		"""
@@ -318,8 +365,9 @@ class Drumkit:
 
 	def opcode_usage(self):
 		"""
-		Returns a dict pf lists, each item's key being the representaion of the opcode,
-		(including name and value) and value a list of regions where it is used.
+		Returns a dict of lists
+		Keys are the string representation of the opcode, (including name and value).
+		Values are a list of regions where it is used.
 		"""
 		return {
 			opstr:list(self.regions_using_opcode(opstr)) \
@@ -347,6 +395,12 @@ class Drumkit:
 		if pitch not in self.groups[group_id].instruments:
 			raise IndexError(pitch)
 		return self.groups[group_id].instruments[pitch]
+
+	def group(self, group_id):
+		"""
+		Convenience function for syntactic uniformity.
+		"""
+		return self.groups[group_id]
 
 	def __str__(self):
 		return f"<Drumkit {self.filename}>"

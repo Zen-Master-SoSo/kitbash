@@ -197,6 +197,35 @@ class Region(_Header):
 			return False
 		return True
 
+	@cached_property
+	def opstrs(self):
+		"""
+		Returns a set of all the string representation (including name and value) of
+		all the opcodes which are used by this Region.
+		Note that when a Drumkit Region is imported from an SFZ or another Drumkit,
+		opcodes from the source region as well as opcodes inherited from container
+		groups, (such as "Group", "Master", and "Global" groups), are included.
+		"""
+		return set(str(opcode) for opcode in self._opcodes.values())
+
+	def uses_opstr(self, opstr):
+		"""
+		Returns True if the given string representation (including name and value) of
+		an opcode is used by this Region. Checks opcodes defined in this Region as well
+		as opcodes inherited from container groups, such as Group, Master, and Global
+		groups.
+		Note that opcode name AND value must match.
+		"""
+		return opstr in self.opstrs
+
+	@property
+	def sample(self):
+		"""
+		Returns the parsed value of the "sample" opcode contained in this region, if
+		one exists.
+		"""
+		return self.opcodes['sample']._parsed_value if 'sample' in self.opcodes else None
+
 
 class Control(_Header):
 	pass

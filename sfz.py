@@ -43,12 +43,7 @@ class SFZXformer(Transformer):
 		"""
 		Transformer function which handles <header> tokens.
 		"""
-		if isinstance(arg1, Meta):
-			meta = arg1
-			toks = arg2
-		else:
-			meta = arg2
-			toks = arg1
+		meta, toks = self.wonky_lark_args(arg1, arg2)
 		if toks[0].value == 'region':
 			header = Region(toks, meta)
 		elif toks[0].value == 'group':
@@ -75,12 +70,7 @@ class SFZXformer(Transformer):
 		"""
 		Transformer function which handles <define> tokens.
 		"""
-		if isinstance(arg1, Meta):
-			meta = arg1
-			toks = arg2
-		else:
-			meta = arg2
-			toks = arg1
+		meta, toks = self.wonky_lark_args(arg1, arg2)
 		self.sfz.defines[toks[0].value] = Define(toks[0].value, toks[1].value, meta)
 
 	@v_args(meta=True)
@@ -88,12 +78,7 @@ class SFZXformer(Transformer):
 		"""
 		Transformer function which handles <include> tokens.
 		"""
-		if isinstance(arg1, Meta):
-			meta = arg1
-			toks = arg2
-		else:
-			meta = arg2
-			toks = arg1
+		meta, toks = self.wonky_lark_args(arg1, arg2)
 		include = Include(self.unquote(self.replace_defs(toks[0].value)), meta)
 		self.sfz.includes.append(include)
 		path = os.path.join(os.path.dirname(self.sfz.filename), include.path)
@@ -117,12 +102,7 @@ class SFZXformer(Transformer):
 		"""
 		Transformer function which handles <opcode> tokens.
 		"""
-		if isinstance(arg1, Meta):
-			meta = arg1
-			toks = arg2
-		else:
-			meta = arg2
-			toks = arg1
+		meta, toks = self.wonky_lark_args(arg1, arg2)
 		if isinstance(self.current_header, Curve):
 			if toks[0] == 'curve_index':
 				self.current_header.curve_index = toks[1].value
@@ -144,6 +124,17 @@ class SFZXformer(Transformer):
 		Transformer function which handles the root of the sfz.
 		"""
 		pass
+
+	def wonky_lark_args(self, arg1, arg2):
+		"""
+		When @v_args decorates a lark.Transformer function, lark passes parsed tokens
+		and meta info to the function. Different versions of lark parser seem to pass
+		the tokens and meta arguments in different order. This function fixes that.
+		"""
+		if isinstance(arg1, Meta):
+			return arg1, arg2
+		else:
+			return arg2, arg1
 
 	def replace_defs(self, var):
 		"""
