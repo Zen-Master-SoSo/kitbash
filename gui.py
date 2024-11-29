@@ -13,6 +13,7 @@ from qt_extras.list_layout import VListLayout
 from simple_carla import PatchbayClient, PatchbayPort
 from simple_carla.qt import CarlaQt
 from midi_notes import MIDI_DRUM_PITCHES
+from jack import JackError
 
 # PyQt5 imports
 from PyQt5 import uic
@@ -24,7 +25,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog,
 from jack_midi_looper import Pause
 from jack_midi_looper.looper_widget import LooperWidget
 
-from kitbash import loops_database, APPLICATION_NAME
+from kitbash import loops_database, APPLICATION_NAME, PACKAGE_DIR
 from kitbash.looper import MultiPortLooper
 from kitbash.drumkit import Drumkit
 from kitbash.drumkit_widget import DrumKitWidget
@@ -45,10 +46,9 @@ class MainWindow(QMainWindow):
 	def __init__(self, options):
 		super().__init__()
 		self.options = options
-		my_dir = os.path.dirname(__file__)
 		with ShutUpQT():
-			uic.loadUi(os.path.join(my_dir, 'res', 'main_window.ui'), self)
-		#self.setWindowIcon(QIcon(os.path.join(my_dir, 'res', 'icon.png')))
+			uic.loadUi(os.path.join(PACKAGE_DIR, 'res', 'main_window.ui'), self)
+		#self.setWindowIcon(QIcon(os.path.join(PACKAGE_DIR, 'res', 'icon.png')))
 		self.settings = QSettings("ZenSoSo", APPLICATION_NAME)
 		geometry = self.settings.value("geometry")
 		if geometry is not None:
@@ -176,7 +176,7 @@ class MainWindow(QMainWindow):
 		(see discover styles)
 		"""
 		self._styles = { '.'.join(os.path.basename(path).split('.')[:-1]): path \
-						for path in glob.glob(os.path.join(my_dir, 'styles', '*.css')) }
+						for path in glob.glob(os.path.join(PACKAGE_DIR, 'styles', '*.css')) }
 		current_style = self.settings.value("style")
 		actions = QActionGroup(self)
 		actions.setExclusive(True)
@@ -618,7 +618,7 @@ class KitLoader(QRunnable):
 
 def main():
 	import argparse
-	global my_dir
+	global PACKAGE_DIR
 
 	p = argparse.ArgumentParser()
 	p.epilog = """
@@ -655,9 +655,12 @@ def main():
 		pass
 	#-----------------------------------------------------------------------
 
-	my_dir = os.path.split(os.path.abspath(__file__))[0]
 	app = QApplication([])
-	main_window = MainWindow(options)
+	try:
+		main_window = MainWindow(options)
+	except JackError:
+		DevilBox('Could not connect to JACK server. Is it running?')
+		sys.exit(1)
 	main_window.show()
 	sys.exit(app.exec())
 

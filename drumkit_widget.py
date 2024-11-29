@@ -20,6 +20,7 @@ from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QPushButton
 
 from qt_extras import SigBlock
+from kitbash import PACKAGE_DIR
 from kitbash.liquid import LiquidSFZ
 
 
@@ -54,9 +55,8 @@ class DrumKitWidget(QFrame):
 		top_layout.setContentsMargins(2,2,2,2)
 		top_layout.setSpacing(0)
 
-		my_dir = os.path.dirname(__file__)
-		self.icon_expanded = QIcon(os.path.join(my_dir, 'res', 'group_expanded.svg'))
-		self.icon_hidden = QIcon(os.path.join(my_dir, 'res', 'group_hidden.svg'))
+		self.icon_expanded = QIcon(os.path.join(PACKAGE_DIR, 'res', 'group_expanded.svg'))
+		self.icon_hidden = QIcon(os.path.join(PACKAGE_DIR, 'res', 'group_hidden.svg'))
 
 		self.hide_button = QPushButton(self)
 		self.hide_button.setIcon(self.icon_expanded)

@@ -13,22 +13,16 @@ from copy import deepcopy
 from functools import reduce
 from operator import and_, or_
 from midi_notes import Note, MIDI_DRUM_PITCHES, MIDI_DRUM_NAMES, MIDI_DRUM_IDS
-from kitbash.sfz import COMMENT_DIVIDER
-from kitbash.sfz import SFZ
-from kitbash.sfz_elems import Global as SFZGlobal
-from kitbash.sfz_elems import Group as SFZGroup
-from kitbash.sfz_elems import Region as SFZRegion
-
-
-class Global(SFZGlobal):
-	pass
-
-
-class Group(SFZGroup):
-	pass
+from sfzen import COMMENT_DIVIDER
+from sfzen import SFZ
+from sfzen.sfz_elems import Region as SFZRegion
 
 
 class Region(SFZRegion):
+	"""
+	A representation of an SFZ <region> header, extending the Region class from
+	sfzen in order to make it mutable.
+	"""
 
 	def __init__(self, source_region, source_filename):
 		self.subheaders = []
@@ -150,6 +144,13 @@ class PercussionInstrument:
 
 
 class PercussionGroup:
+	"""
+	Class used for organizing instruments in a Drumkit, not to be confused with a
+	<group> header in an SFZ file.
+
+	Allows for the user to select an entire category of instruments with one click
+	from the gui.
+	"""
 
 	def __init__(self, group_id):
 		self.group_id = group_id
@@ -219,6 +220,16 @@ class PercussionGroup:
 
 
 class Drumkit:
+	"""
+	Represents a set of percussion instruments organized by groups.
+
+	Passing a filename to the constructor loads the given .sfz file and attaches
+	its regions to a PercussionInstrument. These are organized under
+	PercussionGroup objects.
+
+	You may instantiate an empty Drumkit ohect and import instruments or groups of
+	instruments from other Drumkit objects.
+	"""
 
 	group_pitches = {
 		'bass_drums'	: [35, 36],
@@ -325,9 +336,11 @@ class Drumkit:
 		Do a deep copy from the given Drumkit, of the specified group.
 		group_id:	(str)		Group ID, as from Drumkit.group_pitches
 		source_kit	(Drumkit)	Source to copy from
+
+		Raises IndexError if the specified group was not found in the source kit.
 		"""
 		if not group_id in source_kit.groups:
-			raise Exception(f'Source kit "{source_kit}" does not have a "{group_id}" group')
+			raise IndexError(f'Group "{group_id}" not in source kit "{source_kit}"')
 		self.groups[group_id] = deepcopy(source_kit.groups[group_id])
 
 	def import_instrument(self, pitch, source_kit):
@@ -337,7 +350,7 @@ class Drumkit:
 		pitch:		(int)		MIDI note number of the instrument to copy.
 		source_kit	(Drumkit)	Source to copy from
 		"""
-		pitch, inst_id = self.instrument_ids(pitch)
+		pitch, _ = self.instrument_ids(pitch)
 		self.groups[self.pitch_groups[pitch]].instruments[pitch] = \
 			deepcopy(source_kit.instrument(pitch))
 
@@ -382,18 +395,24 @@ class Drumkit:
 		"""
 		if arg in MIDI_DRUM_IDS:
 			return arg, MIDI_DRUM_IDS[arg]
-		elif arg in MIDI_DRUM_PITCHES:
+		if arg in MIDI_DRUM_PITCHES:
 			return MIDI_DRUM_PITCHES[arg], arg
-		else:
-			raise ValueError()
+		raise ValueError()
 
 	def instrument(self, arg):
-		pitch, inst_id = self.instrument_ids(arg)
+		"""
+		Returns a PercussionInstrument.
+
+		"arg" may bea pitch or an instrument id string (i.e. "side_stick").
+
+		Raises IndexError if the instrument is not found in this Drumkit.
+		"""
+		pitch, _ = self.instrument_ids(arg)
 		group_id = self.pitch_groups[pitch]
 		if group_id not in self.groups:
-			raise IndexError(group_id)
+			raise IndexError(f'Group "{group_id}" not in "{self}"')
 		if pitch not in self.groups[group_id].instruments:
-			raise IndexError(pitch)
+			raise IndexError(f'"{arg}" not in "{self}"')
 		return self.groups[group_id].instruments[pitch]
 
 	def group(self, group_id):

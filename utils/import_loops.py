@@ -2,10 +2,16 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
+"""
+Imports drum loops for previewing drum kits from MIDI files on disk.
+"""
 import sys, logging, argparse
 from kitbash import loops_database
 
 def main():
+	"""
+	Entry point, to be used by script in $HOME/.local/bin/
+	"""
 	parser = argparse.ArgumentParser()
 	parser.epilog = """
 	Write your help text!

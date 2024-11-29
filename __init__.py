@@ -8,6 +8,7 @@ from appdirs import user_config_dir
 from jack_midi_looper import LoopsDB
 
 APPLICATION_NAME = "kitbash"
+PACKAGE_DIR = os.path.dirname(__file__)
 
 def loops_database():
 	try:

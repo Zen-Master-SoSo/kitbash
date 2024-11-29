@@ -2,12 +2,16 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
-import logging
-from PyQt5.QtCore import pyqtSignal
+"""
+Provides LiquidSFZ class
+"""
 from simple_carla.qt import CarlaQt, QtPlugin
-from kitbash.sfz import SFZ
 
 class LiquidSFZ(QtPlugin):
+	"""
+	Encapsulates Liquid SFZ plugin for carla, via the simple_carla object-oriented
+	interface.
+	"""
 
 	plugin_def = {
 		'build': 2,
@@ -23,9 +27,15 @@ class LiquidSFZ(QtPlugin):
 		super().__init__()
 
 	def finalize_init(self):
+		"""
+		Called by Carla after plugin added to its engine.
+		"""
 		CarlaQt.instance.autoload(self, self._filename, self.auto_load_complete)
 
 	def auto_load_complete(self):
+		"""
+		Called by Carla after filename passed to plugin.
+		"""
 		self.initialized = True
 		self.check_ports_ready()
 
