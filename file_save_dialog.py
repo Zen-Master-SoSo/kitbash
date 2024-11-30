@@ -1,3 +1,6 @@
+#  kitbash/file_save_dialog.py
+#
+#  Copyright 2024 liyang <liyang@veronica>
 import sys
 from functools import partial
 from PyQt5.QtCore import Qt
@@ -101,7 +104,11 @@ class TestWindow(QMainWindow):
 			else:
 				self.label.setText("No files selected")
 
+
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
 	ex = TestWindow()
 	sys.exit(app.exec_())
+
+
+#  end kitbash/file_save_dialog.py
