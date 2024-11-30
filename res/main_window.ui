@@ -73,7 +73,7 @@
     <item>
      <layout class="QHBoxLayout" name="hlo_main" stretch="0,10">
       <item>
-       <layout class="QVBoxLayout" name="vlo2">
+       <layout class="QVBoxLayout" name="vlo_target">
         <item>
          <widget class="QFrame" name="frm_target">
           <property name="frameShape">
@@ -84,19 +84,19 @@
           </property>
           <layout class="QVBoxLayout" name="verticalLayout">
            <property name="spacing">
-            <number>5</number>
+            <number>6</number>
            </property>
            <property name="leftMargin">
             <number>4</number>
            </property>
            <property name="topMargin">
-            <number>4</number>
+            <number>6</number>
            </property>
            <property name="rightMargin">
             <number>4</number>
            </property>
            <property name="bottomMargin">
-            <number>4</number>
+            <number>6</number>
            </property>
            <item>
             <widget class="QLabel" name="lbl4">
@@ -106,6 +106,10 @@
              <property name="textFormat">
               <enum>Qt::PlainText</enum>
              </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_audio_indicator">
             </widget>
            </item>
            <item>
@@ -131,19 +135,19 @@
           </property>
           <layout class="QVBoxLayout" name="vlo3">
            <property name="spacing">
-            <number>3</number>
+            <number>4</number>
            </property>
            <property name="leftMargin">
             <number>4</number>
            </property>
            <property name="topMargin">
-            <number>4</number>
+            <number>6</number>
            </property>
            <property name="rightMargin">
             <number>4</number>
            </property>
            <property name="bottomMargin">
-            <number>4</number>
+            <number>6</number>
            </property>
            <item>
             <widget class="QLabel" name="lbl2">

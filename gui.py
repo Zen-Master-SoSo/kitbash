@@ -16,21 +16,19 @@ from jack import JackError
 
 # PyQt5 imports
 from PyQt5 import uic
-from PyQt5.QtCore import	Qt, pyqtSignal, pyqtSlot, QObject, QTimer, QEvent, QSettings, QThreadPool, QRunnable
-from PyQt5.QtGui import		QIcon
+from PyQt5.QtCore import	Qt, pyqtSignal, pyqtSlot, QObject, QTimer, QEvent, QSettings, QThreadPool, QRunnable, QSize
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog, \
 							QAction, QActionGroup, QMenu, QSizePolicy
 
 from jack_midi_looper import Pause
 from jack_midi_looper.looper_widget import LooperWidget
+from kitbash.icons import PIXMAP_AUDIO_OFF, PIXMAP_AUDIO_ON
 
 from kitbash import loops_database, APPLICATION_NAME, PACKAGE_DIR
 from kitbash.looper import MultiPortLooper
 from kitbash.drumkit import Drumkit
 from kitbash.drumkit_widget import DrumKitWidget
 
-
-FILES_TYPE = "SFZ (*.sfz)"
 
 
 class MainWindow(QMainWindow):
@@ -77,6 +75,7 @@ class MainWindow(QMainWindow):
 			self.looper_port_widgets = {}	# dict of DrumKitWidget, indexed on Jack.OwnMidiPort.name
 			self.audio_playback_client = None
 
+		self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
 		self.drumkit_widgets = VListLayout(end_space = 10)
 		self.drumkit_widgets.setContentsMargins(0,0,0,0)
 		self.drumkit_widgets.setSpacing(2)

@@ -64,13 +64,17 @@ class DrumKitWidget(QFrame):
 		top_layout.setSpacing(0)
 
 		self.hide_button = QPushButton(self)
-		self.hide_button.setIcon(ICON_EXPANDED)
+		self.hide_button.setIcon(ICON_EXPANDED())
 		self.hide_button.setIconSize(QSize(16,16))
 		self.hide_button.setFixedWidth(20)
 		self.hide_button.setFixedHeight(20)
 		self.hide_button.setCheckable(True)
 		self.hide_button.toggled.connect(self.hide)
 		top_layout.addWidget(self.hide_button)
+
+		audio_indicator = QLabel(self)
+		audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
+		top_layout.addWidget(audio_indicator)
 
 		self.lbl_use_count = QLabel(self)
 		self.lbl_use_count.setText('(0)')
@@ -83,14 +87,8 @@ class DrumKitWidget(QFrame):
 
 		top_layout.addStretch(20)
 
-		audio_indicator = QLabel(self)
-		audio_indicator.setFixedWidth(48)
-		audio_indicator.setFixedHeight(24)
-		audio_indicator.setPixmap(PIXMAP_AUDIO_OFF)
-		top_layout.addWidget(audio_indicator)
-
 		remove_button = QPushButton(self)
-		remove_button.setIcon(ICON_CLOSE)
+		remove_button.setIcon(ICON_CLOSE())
 		remove_button.setIconSize(QSize(16,16))
 		remove_button.clicked.connect(self.remove_clicked)
 		top_layout.addWidget(remove_button)
@@ -165,11 +163,11 @@ class DrumKitWidget(QFrame):
 			self.initial_height = self.height()
 			self.frm_groups.hide()
 			self.setFixedHeight(30)
-			self.hide_button.setIcon(ICON_HIDDEN)
+			self.hide_button.setIcon(ICON_HIDDEN())
 		else:
 			self.frm_groups.show()
 			self.setFixedHeight(self.initial_height)
-			self.hide_button.setIcon(ICON_EXPANDED)
+			self.hide_button.setIcon(ICON_EXPANDED())
 
 	def update_count(self):
 		use_count = len([ b for b in self.frm_groups.findChildren(InstrumentButton) if b.isChecked() ])
