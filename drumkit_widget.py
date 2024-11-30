@@ -11,6 +11,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtCore import QSize
 from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QHBoxLayout
@@ -22,6 +23,13 @@ from PyQt5.QtWidgets import QPushButton
 from qt_extras import SigBlock
 from kitbash import PACKAGE_DIR
 from kitbash.liquid import LiquidSFZ
+from kitbash.icons import (
+	ICON_EXPANDED,
+	ICON_HIDDEN,
+	ICON_CLOSE,
+	PIXMAP_AUDIO_OFF,
+	PIXMAP_AUDIO_ON
+)
 
 
 class DrumKitWidget(QFrame):
@@ -55,11 +63,8 @@ class DrumKitWidget(QFrame):
 		top_layout.setContentsMargins(2,2,2,2)
 		top_layout.setSpacing(0)
 
-		self.icon_expanded = QIcon(os.path.join(PACKAGE_DIR, 'res', 'group_expanded.svg'))
-		self.icon_hidden = QIcon(os.path.join(PACKAGE_DIR, 'res', 'group_hidden.svg'))
-
 		self.hide_button = QPushButton(self)
-		self.hide_button.setIcon(self.icon_expanded)
+		self.hide_button.setIcon(ICON_EXPANDED)
 		self.hide_button.setIconSize(QSize(16,16))
 		self.hide_button.setFixedWidth(20)
 		self.hide_button.setFixedHeight(20)
@@ -78,8 +83,14 @@ class DrumKitWidget(QFrame):
 
 		top_layout.addStretch(20)
 
+		audio_indicator = QLabel(self)
+		audio_indicator.setFixedWidth(48)
+		audio_indicator.setFixedHeight(24)
+		audio_indicator.setPixmap(PIXMAP_AUDIO_OFF)
+		top_layout.addWidget(audio_indicator)
+
 		remove_button = QPushButton(self)
-		remove_button.setIcon(QIcon.fromTheme('window-close'))
+		remove_button.setIcon(ICON_CLOSE)
 		remove_button.setIconSize(QSize(16,16))
 		remove_button.clicked.connect(self.remove_clicked)
 		top_layout.addWidget(remove_button)
@@ -154,11 +165,11 @@ class DrumKitWidget(QFrame):
 			self.initial_height = self.height()
 			self.frm_groups.hide()
 			self.setFixedHeight(30)
-			self.hide_button.setIcon(self.icon_hidden)
+			self.hide_button.setIcon(ICON_HIDDEN)
 		else:
 			self.frm_groups.show()
 			self.setFixedHeight(self.initial_height)
-			self.hide_button.setIcon(self.icon_expanded)
+			self.hide_button.setIcon(ICON_EXPANDED)
 
 	def update_count(self):
 		use_count = len([ b for b in self.frm_groups.findChildren(InstrumentButton) if b.isChecked() ])
