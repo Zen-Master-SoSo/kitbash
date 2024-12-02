@@ -108,13 +108,13 @@ class MainWindow(QMainWindow):
 		self.drumkit_widgets.setContentsMargins(0,0,0,0)
 		self.drumkit_widgets.setSpacing(2)
 		self.kits_area.setLayout(self.drumkit_widgets)
-		self.threadpool = QThreadPool()
-		self.threadpool.setMaxThreadCount(1)
 
 		self.fill_style_menu()
 		self.load_current_style()
 		self.show_hide_window_elements()
 		self.connect_actions()
+		self.threadpool = QThreadPool()
+		self.threadpool.setMaxThreadCount(1)
 		signal(SIGINT, self.system_signal)
 		signal(SIGTERM, self.system_signal)
 
