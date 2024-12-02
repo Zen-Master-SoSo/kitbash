@@ -110,10 +110,16 @@
            </item>
            <item>
             <widget class="QLabel" name="lbl_audio_indicator">
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
             </widget>
            </item>
            <item>
             <widget class="QPushButton" name="b_preview">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
              <property name="text">
               <string>Preview</string>
              </property>
@@ -210,7 +216,7 @@
         <property name="widgetResizable">
          <bool>true</bool>
         </property>
-        <widget class="QWidget" name="drums_scroll_contents">
+        <widget class="QWidget" name="kits_area">
          <property name="geometry">
           <rect>
            <x>0</x>

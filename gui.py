@@ -2,8 +2,7 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
-import sys, os, logging, json, glob
-from pprint import pprint
+import sys, os, argparse, logging, json, glob
 from functools import partial
 from signal import signal, SIGINT, SIGTERM
 from recent_items_list import RecentItemsList
@@ -16,18 +15,45 @@ from jack import JackError
 
 # PyQt5 imports
 from PyQt5 import uic
-from PyQt5.QtCore import	Qt, pyqtSignal, pyqtSlot, QObject, QTimer, QEvent, QSettings, QThreadPool, QRunnable, QSize
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog, \
-							QAction, QActionGroup, QMenu, QSizePolicy
+from PyQt5.QtCore import (
+	Qt,
+	pyqtSignal,
+	pyqtSlot,
+	QObject,
+	QTimer,
+	QEvent,
+	QSettings,
+	QThreadPool,
+	QRunnable,
+	QSize,
+	QPoint
+)
+from PyQt5.QtWidgets import (
+	QApplication,
+	QMainWindow,
+	QMessageBox,
+	QFileDialog,
+	QAction,
+	QActionGroup,
+	QMenu,
+	QSizePolicy
+)
 
 from jack_midi_looper import Pause
 from jack_midi_looper.looper_widget import LooperWidget
-from kitbash.icons import PIXMAP_AUDIO_OFF, PIXMAP_AUDIO_ON
 
-from kitbash import loops_database, APPLICATION_NAME, PACKAGE_DIR
+from kitbash import (
+	loops_database,
+	APPLICATION_NAME,
+	PACKAGE_DIR
+)
 from kitbash.looper import MultiPortLooper
 from kitbash.drumkit import Drumkit
 from kitbash.drumkit_widget import DrumKitWidget
+from kitbash.icons import (
+	PIXMAP_AUDIO_OFF,
+	PIXMAP_AUDIO_ON
+)
 
 
 
@@ -56,6 +82,7 @@ class MainWindow(QMainWindow):
 		if self.options.no_audio:
 			self.frm_looper.hide()
 			self.looper = None
+			self.lbl_audio_indicator.hide()
 
 		else:
 			self.looper = MultiPortLooper()
@@ -75,11 +102,12 @@ class MainWindow(QMainWindow):
 			self.looper_port_widgets = {}	# dict of DrumKitWidget, indexed on Jack.OwnMidiPort.name
 			self.audio_playback_client = None
 
-		self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
+			self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
+
 		self.drumkit_widgets = VListLayout(end_space = 10)
 		self.drumkit_widgets.setContentsMargins(0,0,0,0)
 		self.drumkit_widgets.setSpacing(2)
-		self.drums_scroll_contents.setLayout(self.drumkit_widgets)
+		self.kits_area.setLayout(self.drumkit_widgets)
 		self.threadpool = QThreadPool()
 		self.threadpool.setMaxThreadCount(1)
 
@@ -124,27 +152,30 @@ class MainWindow(QMainWindow):
 		self.action_ReloadStyle.triggered.connect(self.load_current_style)
 		self.menu_RecentProject.aboutToShow.connect(self.action_show_recent_projects)
 		self.menu_RecentDrumkits.aboutToShow.connect(self.action_show_recent_drumkits)
+		self.kits_area.setContextMenuPolicy(Qt.CustomContextMenu)
+		self.kits_area.customContextMenuRequested.connect(self.slot_kits_context_menu)
+		self.b_preview.toggled.connect(self.slot_preview_toggle)
 
 	def connect_host_callbacks(self):
 		carla = CarlaQt.instance
 		carla.set_ui_parent(self)
-		carla.sig_EngineStarted.connect(self.slot_EngineStarted)
-		carla.sig_EngineStopped.connect(self.slot_EngineStopped)
-		carla.sig_PluginRemoved.connect(self.slot_PluginRemoved)
-		carla.sig_LastPluginRemoved.connect(self.slot_LastPluginRemoved)
-		carla.sig_PatchbayClientAdded.connect(self.slot_PatchbayClientAdded)
-		carla.sig_PatchbayClientRemoved.connect(self.slot_PatchbayClientRemoved)
-		carla.sig_PatchbayPortAdded.connect(self.slot_PatchbayPortAdded)
-		carla.sig_PatchbayPortRemoved.connect(self.slot_PatchbayPortRemoved)
-		carla.sig_ProcessModeChanged.connect(self.slot_ProcessModeChanged)
-		carla.sig_TransportModeChanged.connect(self.slot_TransportModeChanged)
-		carla.sig_BufferSizeChanged.connect(self.slot_BufferSizeChanged)
-		carla.sig_SampleRateChanged.connect(self.slot_SampleRateChanged)
-		carla.sig_CancelableAction.connect(self.slot_CancelableAction)
-		carla.sig_Info.connect(self.slot_Info)
-		carla.sig_Error.connect(self.slot_Error)
-		carla.sig_ApplicationError.connect(self.slot_ApplicationError)
-		carla.sig_Quit.connect(self.slot_Quit)
+		carla.sig_EngineStarted.connect(self.slot_engine_started)
+		carla.sig_EngineStopped.connect(self.slot_engine_stopped)
+		carla.sig_PluginRemoved.connect(self.slot_plugin_removed)
+		carla.sig_LastPluginRemoved.connect(self.slot_last_plugin_removed)
+		carla.sig_PatchbayClientAdded.connect(self.slot_patchbay_client_added)
+		carla.sig_PatchbayClientRemoved.connect(self.slot_patchbay_client_removed)
+		carla.sig_PatchbayPortAdded.connect(self.slot_patchbay_port_added)
+		carla.sig_PatchbayPortRemoved.connect(self.slot_patchbay_port_removed)
+		carla.sig_ProcessModeChanged.connect(self.slot_process_mode_changed)
+		carla.sig_TransportModeChanged.connect(self.slot_transport_mode_changed)
+		carla.sig_BufferSizeChanged.connect(self.slot_buffersize_changed)
+		carla.sig_SampleRateChanged.connect(self.slot_samplerate_changed)
+		carla.sig_CancelableAction.connect(self.slot_carla_cancel)
+		carla.sig_Info.connect(self.slot_carla_info)
+		carla.sig_Error.connect(self.slot_carla_error)
+		carla.sig_ApplicationError.connect(self.slot_application_error)
+		carla.sig_Quit.connect(self.slot_quit)
 
 	@pyqtSlot()
 	def layout_complete(self):
@@ -206,7 +237,7 @@ class MainWindow(QMainWindow):
 	# Project loading / saving:
 
 	def compile_sfz_parts(self):
-		raise NotImplemented()
+		raise NotImplementedError()
 
 	def set_dirty(self, state=True):
 		if not self.project_loading:
@@ -222,7 +253,7 @@ class MainWindow(QMainWindow):
 
 	def load_project(self, filename):
 		if os.path.exists(filename):
-			logging.debug("LOADING PROJECT " + filename)
+			logging.debug('LOADING PROJECT "%s"', filename)
 			self.project_file = filename
 			if self.is_clear():
 				self.execute_project_load()
@@ -261,7 +292,7 @@ class MainWindow(QMainWindow):
 		return dlg.exec() == QMessageBox.Ok
 
 	def clear(self):
-		logging.debug("CLEARING")
+		logging.debug('CLEARING')
 		for widget in reversed(self.drumkit_widgets):
 			self.slot_remove_drumkit(widget)
 
@@ -349,10 +380,10 @@ class MainWindow(QMainWindow):
 		if client_name is None:
 			logging.warning('No physical playback client found')
 		else:
-			logging.debug(f'Found physical playback client "{client_name}"')
+			logging.debug('Found physical playback client "%s"', client_name)
 			self.audio_playback_client = CarlaQt.instance.system_client_by_name(client_name)
 			if self.audio_playback_client is None:
-				return logging.warning(f'Carla did not find system playback client "{client_name}"')
+				return logging.warning('Carla did not find system playback client "%s"', client_name)
 			self.lbl_audio_client.setText(client_name)
 
 	# -----------------------------------------------------------------
@@ -375,11 +406,42 @@ class MainWindow(QMainWindow):
 	# Signal handler
 
 	def system_signal(self, sig, frame):
-		logging.debug("Caught signal - shutting down")
+		logging.debug('Caught signal - shutting down')
 		self.close()
 
 	# -----------------------------------------------------------------
 	# UI handling slots:
+
+	@pyqtSlot(bool)
+	def slot_preview_toggle(state):
+		"""
+		Select bashed sfz for play preview; deselect all drumkits
+		"""
+
+	@pyqtSlot(QPoint)
+	def slot_kits_context_menu(self, position):
+		menu = QMenu()
+		clicked_drumkit_widget = self.kits_area.childAt(position)
+		if clicked_drumkit_widget is not None:
+			while not isinstance(clicked_drumkit_widget, DrumKitWidget) and clicked_drumkit_widget.parent() is not None:
+				clicked_drumkit_widget = clicked_drumkit_widget.parent()
+			if isinstance(clicked_drumkit_widget, DrumKitWidget):
+				action = QAction('Remove "%s"' % clicked_drumkit_widget.moniker, self)
+				action.triggered.connect(partial(self.slot_remove_drumkit, clicked_drumkit_widget))
+				menu.addAction(action)
+		action = QAction('Add drumkit', self)
+		action.triggered.connect(self.action_load_kit)
+		menu.addAction(action)
+		if len(self.drumkit_widgets) > 0:
+			action = QAction('Remove all drumkits', self)
+			action.triggered.connect(self.slot_remove_all_kits)
+			menu.addAction(action)
+		menu.exec(self.kits_area.mapToGlobal(position))
+
+	@pyqtSlot()
+	def slot_remove_all_kits(self):
+		for drumkit_widget in reversed(self.drumkit_widgets):
+			self.slot_remove_drumkit(drumkit_widget)
 
 	@pyqtSlot(bool)
 	def show_looper(self, state):
@@ -469,12 +531,13 @@ class MainWindow(QMainWindow):
 
 	def start_carla_engine(self):
 		if CarlaQt.instance.engine_init("JACK"):
-			return logging.debug('======= Engine started ========')
-		audioError = CarlaQt.instance.get_last_error()
-		if audioError:
-			DevilBox("Could not connect to JACK audio backend; possible reasons:\n%s" % audioError)
+			logging.debug('======= Engine started ========')
 		else:
-			DevilBox("Could not connect to JACK audio backend")
+			audio_error = CarlaQt.instance.get_last_error()
+			if audio_error:
+				DevilBox("Could not connect to JACK audio backend; possible reasons:\n%s" % audio_error)
+			else:
+				DevilBox("Could not connect to JACK audio backend")
 
 	@pyqtSlot()
 	def slot_timer_timeout(self):
@@ -502,63 +565,63 @@ class MainWindow(QMainWindow):
 	# Slots which catch signals from Carla
 
 	@pyqtSlot(PatchbayClient)
-	def slot_PatchbayClientAdded(self, client):
+	def slot_patchbay_client_added(self, client):
 		pass
 
 	@pyqtSlot(PatchbayClient)
-	def slot_PatchbayClientRemoved(self, client):
-		logging.debug(f'slot_PatchbayClientRemoved {client}')
+	def slot_patchbay_client_removed(self, client):
+		logging.debug('slot_patchbay_client_removed %s', client)
 		if client is self.audio_playback_client:
 			self.audio_playback_client = None
 
 	@pyqtSlot(PatchbayPort)
-	def slot_PatchbayPortAdded(self, port):
+	def slot_patchbay_port_added(self, port):
 		if port.port_name in self.looper_port_widgets:
 			self.looper_port_widgets[port.port_name].set_carla_looper_port(port)
 
 	@pyqtSlot(PatchbayPort)
-	def slot_PatchbayPortRemoved(self, port):
+	def slot_patchbay_port_removed(self, port):
 		pass
 
 	@pyqtSlot(QObject)
-	def slot_PluginRemoved(self, plugin):
+	def slot_plugin_removed(self, plugin):
 		pass
 
 	@pyqtSlot()
-	def slot_LastPluginRemoved(self):
+	def slot_last_plugin_removed(self):
 		logging.debug('Got sig_LastPluginRemoved')
 		pass
 
 	@pyqtSlot(int, int, int, int, float, str)
-	def slot_EngineStarted(self, plugin_count, process_mode, transport_mode, buffer_size, sample_rate, driver_name):
+	def slot_engine_started(self, plugin_count, process_mode, transport_mode, buffer_size, sample_rate, driver_name):
 		self.update_timer.start()
 		self.select_audio_playback_client()
 
 	@pyqtSlot()
-	def slot_EngineStopped(self):
-		logging.debug("======= Engine stopped ========")
+	def slot_engine_stopped(self):
+		logging.debug('======= Engine stopped ========')
 		self.update_timer.stop()
 		self.refresh_xruns(0.0, 0)
 
 	@pyqtSlot(int)
-	def slot_ProcessModeChanged(self, int):
+	def slot_process_mode_changed(self, process_mode):
 		pass
 
 	@pyqtSlot(int, str)
-	def slot_TransportModeChanged(self, transport_mode, extra_info):
+	def slot_transport_mode_changed(self, transport_mode, extra_info):
 		logging.debug(transport_mode)
 		logging.debug(extra_info)
 
 	@pyqtSlot(int)
-	def slot_BufferSizeChanged(self, size):
+	def slot_buffersize_changed(self, size):
 		self.refresh_buffer_size(size)
 
 	@pyqtSlot(float)
-	def slot_SampleRateChanged(self, rate):
+	def slot_samplerate_changed(self, rate):
 		self.refresh_sample_rate(int(rate))
 
 	@pyqtSlot(int, bool, str)
-	def slot_CancelableAction(self, plugin_id, started, action):
+	def slot_carla_cancel(self, plugin_id, started, action):
 		if self._cancel_action_dialog is not None:
 			self._cancel_action_dialog.close()
 		if started:
@@ -575,19 +638,19 @@ class MainWindow(QMainWindow):
 			self._cancel_action_dialog = None
 
 	@pyqtSlot(str)
-	def slot_Info(self, info):
+	def slot_carla_info(self, info):
 		QMessageBox.information(self, "Information", info)
 
 	@pyqtSlot(str)
-	def slot_Error(self, error):
+	def slot_carla_error(self, error):
 		DevilBox("Error:" + error)
 
 	@pyqtSlot(str, str, str, int)
-	def slot_ApplicationError(self, err_type, err_message, err_file, err_line):
-		DevilBox('{0} "{1}" in {2}, line {3}'.format(err_type, err_message, err_file, err_line))
+	def slot_application_error(self, err_type, err_message, err_file, err_line):
+		DevilBox(f'{err_type} "{err_message}" in {err_file}, line {err_line}')
 
 	@pyqtSlot()
-	def slot_Quit(self):
+	def slot_quit(self):
 		#self.kill_timers()
 		self._project_is_loading = False
 
@@ -615,8 +678,6 @@ class KitLoader(QRunnable):
 # main()
 
 def main():
-	import argparse
-	global PACKAGE_DIR
 
 	p = argparse.ArgumentParser()
 	p.epilog = """

@@ -41,6 +41,7 @@ class DrumKitWidget(QFrame):
 	def __init__(self, filename, parent):
 		super().__init__(parent)
 		self.filename = filename
+		self.moniker = os.path.basename(self.filename)
 		self.carla_enable = not parent.options.no_audio
 		if self.carla_enable:
 			self.synth = LiquidSFZ(self.filename)
@@ -113,7 +114,7 @@ class DrumKitWidget(QFrame):
 		"""
 		for group in self.drumkit.groups.values():
 			if group.empty():
-				logging.warning('Empty percussing group: ' + group.group_id)
+				logging.warning('Empty percussing group: %s', group.group_id)
 				continue
 			group_frame = GroupFrame(group, self)
 			group_frame.group_id = group.group_id
@@ -216,9 +217,9 @@ class DrumKitWidget(QFrame):
 					if inst_button.inst_id in sel['instruments']:
 						inst_button.setChecked(sel['instruments'][inst_button.inst_id])
 					else:
-						logging.warning(f'Button "{inst_button.inst_id}" not found in project def')
+						logging.warning('Button "%s" not found in project def', inst_button.inst_id)
 			else:
-				logging.warning(f'Group "{group_frame.group_id}" not found in project def')
+				logging.warning('Group "%s" not found in project def', group_frame.group_id)
 
 	@pyqtSlot(int)
 	def synth_ready(self, plugin_id):
@@ -230,7 +231,7 @@ class DrumKitWidget(QFrame):
 		self.sig_synth_ready.emit(self)
 
 	def __str__(self):
-		return "<DrumKitWidget %s>" % os.path.basename(self.filename)
+		return f"<DrumKitWidget {self.moniker}>"
 
 
 class TitleFrame(QFrame):
