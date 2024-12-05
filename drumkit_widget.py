@@ -21,8 +21,8 @@ from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QPushButton
 
 from qt_extras import SigBlock
+from liquiphy import LiquidJack
 from kitbash import PACKAGE_DIR
-from kitbash.liquid import LiquidSFZ
 from kitbash.icons import (
 	ICON_EXPANDED,
 	ICON_HIDDEN,
@@ -42,11 +42,11 @@ class DrumKitWidget(QFrame):
 		super().__init__(parent)
 		self.filename = filename
 		self.moniker = os.path.basename(self.filename)
-		self.carla_enable = not parent.options.no_audio
-		if self.carla_enable:
-			self.synth = LiquidSFZ(self.filename)
-			self.synth.sig_Ready.connect(self.synth_ready)
-			self.synth.add_to_carla()
+		if parent.options.no_audio:
+			self.synth = None
+		else:
+			self.synth = QtLiquidJack(self.filename)
+			self.synth.sig_ready.connect(self.synth_ready)
 
 		self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 		self.setFrameStyle(QFrame.Panel)
@@ -107,6 +107,15 @@ class DrumKitWidget(QFrame):
 		main_layout.addWidget(self.frm_groups)
 		self.setLayout(main_layout)
 
+	@pyqtSlot()
+	def synth_ready(self):
+		"""
+		Received from QtLiquidJack when ready to play.
+		Notifies MainWindow so the MultiPortLooper can connect a new port to this
+		widget's synth.
+		"""
+		self.sig_synth_ready.emit(self)
+
 	def drumkit_loaded(self):
 		"""
 		Called when KitLoader is finshed loading and interpreted SFZ.
@@ -133,15 +142,6 @@ class DrumKitWidget(QFrame):
 		"""
 		self.port_number = port_number
 		self.port_name = port_name
-
-	def set_carla_looper_port(self, port):
-		"""
-		Called when Carla sends notification that a patchbay client has been added,
-		when the client_name matches the port name from Looper.add_port().
-		"""
-		self.carla_looper_port = port
-		for liquid_port in self.synth.midi_ins():
-			port.connect_to(liquid_port)
 
 	@pyqtSlot(QFrame)
 	def group_clicked(self, group_frame):
@@ -221,17 +221,25 @@ class DrumKitWidget(QFrame):
 			else:
 				logging.warning('Group "%s" not found in project def', group_frame.group_id)
 
-	@pyqtSlot(int)
-	def synth_ready(self, plugin_id):
-		"""
-		Received from Carla when LiquidSFZ is ready to play.
-		Notifies MainWindow so the MultiPortLooper can connect a new port to this
-		widget's synth.
-		"""
-		self.sig_synth_ready.emit(self)
-
 	def __str__(self):
 		return f"<DrumKitWidget {self.moniker}>"
+
+
+class QtLiquidJack(LiquidJack, QObject):
+
+	sig_ready = pyqtSignal()
+
+	def __init__(self, filename = None):
+		LiquidJack.__init__(self, filename)
+		QObject.__init__(self)
+
+	def port_registration_callback(self, port, register):
+		if self.midi_in is None or self.audio_out_1 is None or self.audio_out_2 is None:
+			super().port_registration_callback(port, register)
+			if self.midi_in is None or self.audio_out_1 is None or self.audio_out_2 is None:
+				return
+			logging.debug('QtLiquidJack emitting sig_ready')
+			self.sig_ready.emit()
 
 
 class TitleFrame(QFrame):

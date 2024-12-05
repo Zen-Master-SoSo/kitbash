@@ -36,7 +36,6 @@ class MultiPortLooper(Looper):
 		self.pitch_maps	= {		# dict of int (port_number), indexed on pitch
 			pitch:None for pitch in range(128)
 		}
-		self.state = Looper.INACTIVE
 		self._real_process_callback = self._null_process_callback
 		self.client = Client(self.client_name, no_start_server=True)
 		self.client.set_blocksize_callback(self._blocksize_callback)
@@ -44,16 +43,8 @@ class MultiPortLooper(Looper):
 		self.client.set_process_callback(self._process_callback)
 		self.client.set_shutdown_callback(self._shutdown_callback)
 		self.client.set_xrun_callback(self._xrun_callback)
-		self.client.set_port_connect_callback(self._port_connection_callback)
 		self.client.activate()
 		self.client.get_ports()
-
-	def _port_connection_callback(self, a, b, connect):
-		logging.debug('Jack port connection %s -> %s %s', a, b, connect)
-
-	def first_physical_playback_client(self):
-		for port in self.client.get_ports(is_audio=True, is_input=True, is_physical=True):
-			return port.name.split(':')[0]
 
 	def add_port(self):
 		"""
