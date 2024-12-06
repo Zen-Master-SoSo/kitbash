@@ -2,14 +2,21 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
-import sys, os, argparse, logging, json, glob
+import sys
+import os
+import argparse
+import logging
+import queue
+import json
+import glob
+import jacklib
 from functools import partial
 from signal import signal, SIGINT, SIGTERM
 from recent_items_list import RecentItemsList
 from qt_extras import ShutUpQT, DevilBox
 from qt_extras.list_layout import VListLayout
 from midi_notes import MIDI_DRUM_PITCHES
-from jack import JackError
+from jackmatchmaker import JackMatchmaker
 from liquiphy import LiquidSFZ
 
 # PyQt5 imports
@@ -38,7 +45,6 @@ from PyQt5.QtWidgets import (
 	QSizePolicy
 )
 
-from jack_midi_looper import Pause
 from jack_midi_looper.looper_widget import LooperWidget
 
 from kitbash import (
@@ -78,12 +84,16 @@ class MainWindow(QMainWindow):
 		self.recent_projects = RecentItemsList(self.settings.value("recent_projects", defaultValue=[]))
 		self.recent_drumkits = RecentItemsList(self.settings.value("recent_drumkits", defaultValue=[]))
 
+		self.threadpool = QThreadPool()
+		self.threadpool.setMaxThreadCount(2)
+
 		if self.options.no_audio:
 			self.frm_looper.hide()
 			self.looper = None
 			self.lbl_audio_indicator.hide()
 
 		else:
+
 			self.looper = MultiPortLooper()
 			self.looper_widget = LooperWidget(self, loops_database(), self.looper)
 			self.looper_widget.single_loop = True
@@ -92,9 +102,15 @@ class MainWindow(QMainWindow):
 			self.frm_looper.layout().addWidget(self.looper_widget)
 			self.looper.signals.sig_state_changed.connect(self.looper_widget.play_button.setChecked)
 
-			self.update_timer = QTimer()
-			self.update_timer.setInterval(int(1 / 4 * 1000))
-			self.update_timer.timeout.connect(self.slot_timer_timeout)
+			try:
+				self.conn_manager = ConnectionManager()
+			except RuntimeError as e:
+				raise JackConnectError
+			self.threadpool.start(self.conn_manager)
+
+			#self.update_timer = QTimer()
+			#self.update_timer.setInterval(int(1 / 4 * 1000))
+			#self.update_timer.timeout.connect(self.slot_timer_timeout)
 
 			self.looper_port_widgets = {}	# dict of DrumKitWidget, indexed on Jack.OwnMidiPort.name
 			self.audio_playback_client = None
@@ -110,8 +126,7 @@ class MainWindow(QMainWindow):
 		self.load_current_style()
 		self.show_hide_window_elements()
 		self.connect_actions()
-		self.threadpool = QThreadPool()
-		self.threadpool.setMaxThreadCount(1)
+
 		signal(SIGINT, self.system_signal)
 		signal(SIGTERM, self.system_signal)
 
@@ -329,8 +344,7 @@ class MainWindow(QMainWindow):
 	@pyqtSlot(QObject)
 	def drumkit_synth_ready(self, drumkit_widget):
 		logging.debug('MainWindow %s synth ready', drumkit_widget)
-		with Pause(self.looper):
-			drumkit_widget.port_number, drumkit_widget.port_name = self.looper.add_port()
+		drumkit_widget.port_number, drumkit_widget.port_name = self.looper.add_port()
 		self.looper_port_widgets[drumkit_widget.port_name] = drumkit_widget
 		if self.audio_playback_client is None:
 			self.select_audio_playback_client()
@@ -374,6 +388,7 @@ class MainWindow(QMainWindow):
 	def closeEvent(self, event):
 		logging.debug('MainWindow close()')
 		if not self.options.no_audio:
+			self.conn_manager.quit()
 			for drumkit_widget in self.drumkit_widgets:
 				drumkit_widget.synth.quit()
 		self.settings.setValue("geometry", self.saveGeometry())
@@ -536,6 +551,59 @@ class KitLoader(QRunnable):
 		self.signals.sig_complete.emit(self.drumkit_widget)
 
 
+class ConnectionManager(JackMatchmaker, QRunnable):
+
+	def __init__(self):
+		JackMatchmaker.__init__(self, [
+			('looper', 'liquidsfz.*:midi'),
+			('liquidsfz.*:audio_out_1', 'system:.*1'),
+			('liquidsfz.*:audio_out_2', 'system:.*2')
+		], name='kitbash-conn')
+		QRunnable.__init__(self)
+		self.stay_alive = True
+		self.connect(1)
+		jacklib.set_port_registration_callback(self.client, self.reg_callback, None)
+		jacklib.set_port_connect_callback(self.client, self.connect_callback, None)
+		jacklib.set_port_rename_callback(self.client, self.rename_callback, None)
+		jacklib.set_property_change_callback(self.client, self.property_callback, None)
+		jacklib.activate(self.client)
+		self._refresh()
+
+	def quit(self):
+		self.stay_alive = False
+		self.queue.put(None)
+
+	@pyqtSlot()
+	def run(self):
+		while self.stay_alive:
+			event = self.queue.get()
+			if event is None:
+				break
+			(srcport, dstport) = event
+			port = self._get_port(srcport)
+			if port:
+				flags = jacklib.port_flags(port)
+				if flags & jacklib.JackPortIsInput:
+					to_connect = [(p, dstport) for _, p in self.get_connections([srcport])]
+				else:
+					to_connect = [(srcport, dstport)]
+				for outport, inport in to_connect:
+					port = self._get_port(outport)
+					if not port:
+						continue
+					if not jacklib.port_connected_to(port, inport):
+						logging.info("Connecting ports: '%s' --> '%s'.", outport, inport)
+						self.connection_cache[(outport, inport)] = True
+						jacklib.connect(self.client, outport, inport)
+					else:
+						logging.debug("Ports already connected: '%s' --> '%s'.", outport, inport)
+			else:
+				logging.warning("Port vanished: %s", srcport)
+
+
+class JackConnectError(RuntimeError):
+	pass
+
 
 # -----------------------------------------------------------------
 # main()
@@ -580,7 +648,7 @@ def main():
 	app = QApplication([])
 	try:
 		main_window = MainWindow(options)
-	except JackError:
+	except JackConnectError:
 		DevilBox('Could not connect to JACK server. Is it running?')
 		sys.exit(1)
 	main_window.show()

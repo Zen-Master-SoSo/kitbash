@@ -44,6 +44,7 @@ class MultiPortLooper(Looper):
 		self.client.set_shutdown_callback(self._shutdown_callback)
 		self.client.set_xrun_callback(self._xrun_callback)
 		self.client.activate()
+		logging.debug('Connected as %s', self.client)
 		self.client.get_ports()
 
 	def add_port(self):
@@ -57,7 +58,8 @@ class MultiPortLooper(Looper):
 		"""
 		self.port_number += 1
 		port_name = 'looper_%02d' % self.port_number
-		self.out_ports[self.port_number] = self.client.midi_outports.register(port_name)
+		with Pause(self):
+			self.out_ports[self.port_number] = self.client.midi_outports.register(port_name)
 		return self.port_number, port_name
 
 	def delete_port(self, port_number):
