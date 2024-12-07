@@ -4,13 +4,16 @@
 #
 
 import logging
-import queue
 import re
+from functools import cached_property
 import jacklib
 from jacklib.helpers import c_char_p_p_to_list
 from jacklib.helpers import get_jack_status_error_string
-from PyQt5.QtCore import QRunnable
-from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtCore import (
+	QRunnable,
+	pyqtSignal,
+	pyqtSlot
+)
 
 
 class JackConnectionManager(QRunnable):
@@ -26,8 +29,9 @@ class JackConnectionManager(QRunnable):
 	def __init__(self):
 		if self.client is None:
 			super().__init__()
-			self.stay_alive = True
+			self.connected = True
 			self.client_name = 'conn-man'
+			logging.debug('Connecting')
 			status = jacklib.jack_status_t()
 			self.client = jacklib.client_open(self.client_name, jacklib.JackNoStartServer, status)
 			if status.value:
@@ -46,17 +50,16 @@ class JackConnectionManager(QRunnable):
 			jacklib.set_port_registration_callback(self.client, self.port_registration_callback, None)
 			jacklib.set_port_connect_callback(self.client, self.port_connect_callback, None)
 			jacklib.set_port_rename_callback(self.client, self.port_rename_callback, None)
-			jacklib.set_property_change_callback(self.client, self.property_change_callback, None)
+			jacklib.set_xrun_callback(self.client, self.xrun_callback, None)
 			jacklib.activate(self.client)
-			self.queue = queue.Queue()
 
 	def error_callback(self, error):
 		error = error.decode(jacklib.ENCODING, errors='ignore')
 		logging.debug(error)
 
 	def port_registration_callback(self, port_id, action, *args):
-		port = jacklib.port_by_id(self.client, port_id)
-		logging.debug("Port registration: %s %s", jacklib.port_name(port), action)
+		port = self.get_port_by_id(port_id)
+		logging.debug("%s %s", port, 'register' if action else 'gone')
 
 	def port_connect_callback(self, port_a_id, port_b_id, connect, *args):
 		port_a = jacklib.port_by_id(self.client, port_a_id)
@@ -70,29 +73,21 @@ class JackConnectionManager(QRunnable):
 		new_name = new_name.decode(jacklib.ENCODING, errors='ignore') if new_name else 'NO_OLD_NAME'
 		logging.debug("Port name %s changed to %s.", old_name, new_name)
 
-	def property_change_callback(self, subject, name, type_, *args):
-		name = name.decode(jacklib.ENCODING, errors='ignore') if name else 'NO_NAME'
-		logging.debug("Property '%s' on subject %s %s.", name, subject, PROPERTY_CHANGE_MAP[type_])
+	def xrun_callback(self, millis):
+		logging.debug("Xrun '%d' millis", millis)
 
 	def shutdown_callback(self, *args):
 		logging.debug("JACK server signalled shutdown.")
 		self.client = None
 		self.queue.put(None)
 
-	def _refresh(self):
-		inputs = list(flatten(self.get_ports(jacklib.JackPortIsInput)))
-		outputs = list(flatten(self.get_ports(jacklib.JackPortIsOutput)))
+	def get_port_by_name(self, name):
+		ptr = jacklib.port_by_name(self.client, name)
+		return JackPort(ptr, name)
 
-	def _get_port_by_name(self, name):
-		return JackPort(jacklib.port_by_name(self.client, name), name)
-
-	def _get_aliases(self, port_name):
-		port = self._get_port_by_name(port_name)
-		num_aliases, *aliases = jacklib.port_get_aliases(port)
-		return list(aliases[:num_aliases])
-
-	def get_ports(self, direction = jacklib.JackPortIsOutput):
-		return c_char_p_p_to_list(jacklib.get_ports(self.client, '', '', direction))
+	def get_port_by_id(self, port_id):
+		ptr = jacklib.port_by_id(self.client, port_id)
+		return JackPort(ptr, jacklib.port_name(ptr))
 
 	def get_connections(self, ports = None):
 		if ports is None:
@@ -107,58 +102,31 @@ class JackConnectionManager(QRunnable):
 		for outport, inport in self.get_connections():
 			print("%s\n    %s\n" % (outport, inport))
 
-	def list_ports(self, direction = jacklib.JackPortIsOutput):
-		for port_name in self.get_ports(direction):
-			port = self._get_port_by_name(port_name)
+	def list_ports(self):
+		print('==== INPUT PORTS ====')
+		self._list_ports(jacklib.JackPortIsInput)
+		print('==== OUTPUT PORTS ====')
+		self._list_ports(jacklib.JackPortIsOutput)
+
+	def _list_ports(self, flags):
+		for port in self.get_ports(flags):
 			print(port.name, end = "")
-			pretty_name = port.pretty_name()
-			if pretty_name:
-				print('; pretty_name: "' + '", "'.join(pretty_name) + '"', end = '')
-			aliases = port.aliases()
-			if aliases:
-				print('; alias "' + '", "'.join(aliases) + '"', end = '')
+			if port.aliases:
+				print('; alias "' + '", "'.join(port.aliases) + '"', end = '')
 			print()
 
-	def _format_ports(self, ports):
-		out = []
-		for output in ports:
-			out.append(output[0])
-			for alias in output[1:]:
-				if isinstance(alias, tuple):
-					alias = alias[1]
-				out.append("    %s" % alias)
-		return "\n".join(out)
+	def get_ports(self, flags = 0):
+		return [
+			self.get_port_by_name(name) \
+			for name in c_char_p_p_to_list(
+				jacklib.get_ports(self.client, '', '', flags))
+		]
 
-	@pyqtSlot()
-	def run(self):
-		while self.stay_alive:
-			tup = self.queue.get()
-			if tup is None:
-				break
-			(srcport, dstport) = tup
-			port = self._get_port_by_name(srcport)
-			if port:
-				flags = jacklib.port_flags(port)
-				if flags & jacklib.JackPortIsInput:
-					to_connect = [(p, dstport) for _, p in self.get_connections([srcport])]
-				else:
-					to_connect = [(srcport, dstport)]
-				for outport, inport in to_connect:
-					port = self._get_port_by_name(outport)
-					if not port:
-						continue
-					if not jacklib.port_connected_to(port, inport):
-						logging.info("Connecting ports: '%s' --> '%s'.", outport, inport)
-						self.connection_cache[(outport, inport)] = True
-						jacklib.connect(self.client, outport, inport)
-					else:
-						logging.debug("Ports already connected: '%s' --> '%s'.", outport, inport)
-			else:
-				logging.warning("Port vanished: %s", srcport)
+	def pysical_input_ports(self):
+		return self.get_ports(jacklib.JackPortIsInput | jacklib.JackPortIsPhysical)
 
-	def quit(self):
-		self.stay_alive = False
-		self.queue.put(None)
+	def pysical_output_ports(self):
+		return self.get_ports(jacklib.JackPortIsOutput | jacklib.JackPortIsPhysical)
 
 	def close(self):
 		if self.client:
@@ -168,23 +136,38 @@ class JackConnectionManager(QRunnable):
 
 class JackPort:
 
-	def __init__(self, lp_jack_port, name):
-		self.lp_jack_port = lp_jack_port
+	def __init__(self, ptr, name):
+		self.ptr = ptr
 		self.name = name
 
+	@cached_property
 	def aliases(self):
-		num_aliases, *aliases = jacklib.port_get_aliases(self.lp_jack_port)
+		num_aliases, *aliases = jacklib.port_get_aliases(self.ptr)
 		return list(aliases[:num_aliases])
 
-	def pretty_name(self):
-		pretty_name = jacklib.get_port_pretty_name(JackConnectionManager(), self.lp_jack_port)
-		if pretty_name:
-			try:
-				client, port = port_name.split(':', 1)
-			except ValueError:
-				pass
-			else:
-				return client + ':' + pretty_name
+	@cached_property
+	def flags(self):
+		return jacklib.port_flags(self.ptr)
+
+	@cached_property
+	def is_physical(self):
+		return self.flags & jacklib.JackPortIsPhysical
+
+	@cached_property
+	def is_input(self):
+		return self.flags & jacklib.JackPortIsInput
+
+	@cached_property
+	def is_output(self):
+		return self.flags & jacklib.JackPortIsOutput
+
+	def __str__(self):
+		return '<JackPort "{}" ({}, {})>'.format(
+			self.name,
+			'physical' if self.is_physical else 'plugin',
+			'input'if self.is_input else 'output'
+		)
+
 
 
 class JackConnectError(RuntimeError):

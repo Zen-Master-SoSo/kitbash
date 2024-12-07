@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QPushButton
 
 from qt_extras import SigBlock
-from liquiphy import LiquidJack
+from liquiphy import LiquidSFZ
 from kitbash import PACKAGE_DIR
 from kitbash.icons import (
 	ICON_EXPANDED,

@@ -6,18 +6,17 @@ import sys
 import os
 import argparse
 import logging
-import queue
 import json
 import glob
-import jacklib
 from functools import partial
 from signal import signal, SIGINT, SIGTERM
+import jacklib
 from recent_items_list import RecentItemsList
 from qt_extras import ShutUpQT, DevilBox
 from qt_extras.list_layout import VListLayout
 from midi_notes import MIDI_DRUM_PITCHES
-from jackmatchmaker import JackMatchmaker
 from liquiphy import LiquidSFZ
+from jack_midi_looper.looper_widget import LooperWidget
 
 # PyQt5 imports
 from PyQt5 import uic
@@ -31,7 +30,6 @@ from PyQt5.QtCore import (
 	QSettings,
 	QThreadPool,
 	QRunnable,
-	QSize,
 	QPoint
 )
 from PyQt5.QtWidgets import (
@@ -45,8 +43,6 @@ from PyQt5.QtWidgets import (
 	QSizePolicy
 )
 
-from jack_midi_looper.looper_widget import LooperWidget
-
 from kitbash import (
 	loops_database,
 	APPLICATION_NAME,
@@ -59,12 +55,16 @@ from kitbash.icons import (
 	PIXMAP_AUDIO_OFF,
 	PIXMAP_AUDIO_ON
 )
-
+from kitbash.connection_manager import (
+	JackConnectionManager,
+	JackConnectError
+)
 
 
 class MainWindow(QMainWindow):
 
-	instance = None	# Enforce singleton
+	instance = None
+	options = None
 
 	def __new__(cls, options):
 		if cls.instance is None:
@@ -72,8 +72,10 @@ class MainWindow(QMainWindow):
 		return cls.instance
 
 	def __init__(self, options):
-		super().__init__()
+		if not self.options is None:
+			return
 		self.options = options
+		super().__init__()
 		with ShutUpQT():
 			uic.loadUi(os.path.join(PACKAGE_DIR, 'res', 'main_window.ui'), self)
 		#self.setWindowIcon(QIcon(os.path.join(PACKAGE_DIR, 'res', 'icon.png')))
@@ -93,7 +95,6 @@ class MainWindow(QMainWindow):
 			self.lbl_audio_indicator.hide()
 
 		else:
-
 			self.looper = MultiPortLooper()
 			self.looper_widget = LooperWidget(self, loops_database(), self.looper)
 			self.looper_widget.single_loop = True
@@ -101,20 +102,13 @@ class MainWindow(QMainWindow):
 			self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 			self.frm_looper.layout().addWidget(self.looper_widget)
 			self.looper.signals.sig_state_changed.connect(self.looper_widget.play_button.setChecked)
-
-			try:
-				self.conn_manager = JackConnectionManager()
-			except RuntimeError as e:
-				raise JackConnectError
+			self.conn_manager = JackConnectionManager()
 			self.threadpool.start(self.conn_manager)
-
 			#self.update_timer = QTimer()
 			#self.update_timer.setInterval(int(1 / 4 * 1000))
 			#self.update_timer.timeout.connect(self.slot_timer_timeout)
-
 			self.looper_port_widgets = {}	# dict of DrumKitWidget, indexed on Jack.OwnMidiPort.name
 			self.audio_playback_client = None
-
 			self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
 
 		self.drumkit_widgets = VListLayout(end_space = 10)
@@ -132,7 +126,9 @@ class MainWindow(QMainWindow):
 
 		self.project_file = None
 		self.project_definition = None
+		self.project_clearing = False
 		self.project_loading = False
+		self._dirty = False
 
 		QTimer.singleShot(0, self.layout_complete)
 
@@ -380,11 +376,6 @@ class MainWindow(QMainWindow):
 	# -----------------------------------------------------------------
 	# QMainWindow overloads (see also: "timerEvent")
 
-	def eventFilter(self, source, event):
-		if event.type() == QEvent.KeyPress:
-			key = event.key()
-		return super().eventFilter(source, event)
-
 	def closeEvent(self, event):
 		logging.debug('MainWindow close()')
 		if not self.options.no_audio:
@@ -398,7 +389,7 @@ class MainWindow(QMainWindow):
 	# -----------------------------------------------------------------
 	# Signal handler
 
-	def system_signal(self, sig, frame):
+	def system_signal(self, *_):
 		logging.debug('Caught signal - shutting down')
 		self.close()
 
@@ -406,7 +397,7 @@ class MainWindow(QMainWindow):
 	# UI handling slots:
 
 	@pyqtSlot(bool)
-	def slot_preview_toggle(state):
+	def slot_preview_toggle(self, state):
 		"""
 		Select bashed sfz for play preview; deselect all drumkits
 		"""
@@ -419,7 +410,7 @@ class MainWindow(QMainWindow):
 			while not isinstance(clicked_drumkit_widget, DrumKitWidget) and clicked_drumkit_widget.parent() is not None:
 				clicked_drumkit_widget = clicked_drumkit_widget.parent()
 			if isinstance(clicked_drumkit_widget, DrumKitWidget):
-				action = QAction('Remove "%s"' % clicked_drumkit_widget.moniker, self)
+				action = QAction(f'Remove "{clicked_drumkit_widget.moniker}"', self)
 				action.triggered.connect(partial(self.slot_remove_drumkit, clicked_drumkit_widget))
 				menu.addAction(action)
 		action = QAction('Add drumkit', self)
