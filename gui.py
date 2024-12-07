@@ -103,7 +103,7 @@ class MainWindow(QMainWindow):
 			self.looper.signals.sig_state_changed.connect(self.looper_widget.play_button.setChecked)
 
 			try:
-				self.conn_manager = ConnectionManager()
+				self.conn_manager = JackConnectionManager()
 			except RuntimeError as e:
 				raise JackConnectError
 			self.threadpool.start(self.conn_manager)
@@ -549,60 +549,6 @@ class KitLoader(QRunnable):
 	def run(self):
 		self.drumkit_widget.drumkit = Drumkit(self.drumkit_widget.filename)
 		self.signals.sig_complete.emit(self.drumkit_widget)
-
-
-class ConnectionManager(JackMatchmaker, QRunnable):
-
-	def __init__(self):
-		JackMatchmaker.__init__(self, [
-			('looper', 'liquidsfz.*:midi'),
-			('liquidsfz.*:audio_out_1', 'system:.*1'),
-			('liquidsfz.*:audio_out_2', 'system:.*2')
-		], name='kitbash-conn')
-		QRunnable.__init__(self)
-		self.stay_alive = True
-		self.connect(1)
-		jacklib.set_port_registration_callback(self.client, self.reg_callback, None)
-		jacklib.set_port_connect_callback(self.client, self.connect_callback, None)
-		jacklib.set_port_rename_callback(self.client, self.rename_callback, None)
-		jacklib.set_property_change_callback(self.client, self.property_callback, None)
-		jacklib.activate(self.client)
-		self._refresh()
-
-	def quit(self):
-		self.stay_alive = False
-		self.queue.put(None)
-
-	@pyqtSlot()
-	def run(self):
-		while self.stay_alive:
-			event = self.queue.get()
-			if event is None:
-				break
-			(srcport, dstport) = event
-			port = self._get_port(srcport)
-			if port:
-				flags = jacklib.port_flags(port)
-				if flags & jacklib.JackPortIsInput:
-					to_connect = [(p, dstport) for _, p in self.get_connections([srcport])]
-				else:
-					to_connect = [(srcport, dstport)]
-				for outport, inport in to_connect:
-					port = self._get_port(outport)
-					if not port:
-						continue
-					if not jacklib.port_connected_to(port, inport):
-						logging.info("Connecting ports: '%s' --> '%s'.", outport, inport)
-						self.connection_cache[(outport, inport)] = True
-						jacklib.connect(self.client, outport, inport)
-					else:
-						logging.debug("Ports already connected: '%s' --> '%s'.", outport, inport)
-			else:
-				logging.warning("Port vanished: %s", srcport)
-
-
-class JackConnectError(RuntimeError):
-	pass
 
 
 # -----------------------------------------------------------------
