@@ -6,133 +6,15 @@
 import logging
 import re
 from functools import cached_property
+from queue import Queue
 import jacklib
 from jacklib.helpers import c_char_p_p_to_list
 from jacklib.helpers import get_jack_status_error_string
 from PyQt5.QtCore import (
-	QRunnable,
+	QObject,
 	pyqtSignal,
 	pyqtSlot
 )
-
-
-class JackConnectionManager(QRunnable):
-
-	instance = None
-	client = None
-
-	def __new__(cls):
-		if cls.instance is None:
-			cls.instance = super().__new__(cls)
-		return cls.instance
-
-	def __init__(self):
-		if self.client is None:
-			super().__init__()
-			self.connected = True
-			self.client_name = 'conn-man'
-			logging.debug('Connecting')
-			status = jacklib.jack_status_t()
-			self.client = jacklib.client_open(self.client_name, jacklib.JackNoStartServer, status)
-			if status.value:
-				raise JackConnectError(get_jack_status_error_string(status))
-			if not self.client:
-				raise JackConnectError('No client created')
-			name = jacklib.get_client_name(self.client)
-			if name is None:
-				raise RuntimeError("Could not get JACK client name.")
-			else:
-				self.client_name = name.decode()
-			jacklib.on_shutdown(self.client, self.shutdown_callback, None)
-			logging.debug("Client connected, name: %s UUID: %s",
-				self.client_name, jacklib.client_get_uuid(self.client))
-			jacklib.set_error_function(self.error_callback)
-			jacklib.set_port_registration_callback(self.client, self.port_registration_callback, None)
-			jacklib.set_port_connect_callback(self.client, self.port_connect_callback, None)
-			jacklib.set_port_rename_callback(self.client, self.port_rename_callback, None)
-			jacklib.set_xrun_callback(self.client, self.xrun_callback, None)
-			jacklib.activate(self.client)
-
-	def error_callback(self, error):
-		error = error.decode(jacklib.ENCODING, errors='ignore')
-		logging.debug(error)
-
-	def port_registration_callback(self, port_id, action, *args):
-		port = self.get_port_by_id(port_id)
-		logging.debug("%s %s", port, 'register' if action else 'gone')
-
-	def port_connect_callback(self, port_a_id, port_b_id, connect, *args):
-		port_a = jacklib.port_by_id(self.client, port_a_id)
-		port_b = jacklib.port_by_id(self.client, port_b_id)
-		port_a_name = jacklib.port_name(port_a)
-		port_b_name = jacklib.port_name(port_b)
-		logging.debug("New port connection: '%s' -> '%s'", port_a_name, port_b_name)
-
-	def port_rename_callback(self, port_id, old_name, new_name, *args):
-		old_name = old_name.decode(jacklib.ENCODING, errors='ignore') if old_name else 'NO_OLD_NAME'
-		new_name = new_name.decode(jacklib.ENCODING, errors='ignore') if new_name else 'NO_OLD_NAME'
-		logging.debug("Port name %s changed to %s.", old_name, new_name)
-
-	def xrun_callback(self, millis):
-		logging.debug("Xrun '%d' millis", millis)
-
-	def shutdown_callback(self, *args):
-		logging.debug("JACK server signalled shutdown.")
-		self.client = None
-		self.queue.put(None)
-
-	def get_port_by_name(self, name):
-		ptr = jacklib.port_by_name(self.client, name)
-		return JackPort(ptr, name)
-
-	def get_port_by_id(self, port_id):
-		ptr = jacklib.port_by_id(self.client, port_id)
-		return JackPort(ptr, jacklib.port_name(ptr))
-
-	def get_connections(self, ports = None):
-		if ports is None:
-			ports = (p[0] for p in self.get_ports())
-		for port_name in ports:
-			port = jacklib.port_by_name(self.client, port_name)
-			if port and jacklib.port_connected(port):
-				for other in jacklib.port_get_all_connections(self.client, port):
-					yield((port_name, other))
-
-	def list_connections(self):
-		for outport, inport in self.get_connections():
-			print("%s\n    %s\n" % (outport, inport))
-
-	def list_ports(self):
-		print('==== INPUT PORTS ====')
-		self._list_ports(jacklib.JackPortIsInput)
-		print('==== OUTPUT PORTS ====')
-		self._list_ports(jacklib.JackPortIsOutput)
-
-	def _list_ports(self, flags):
-		for port in self.get_ports(flags):
-			print(port.name, end = "")
-			if port.aliases:
-				print('; alias "' + '", "'.join(port.aliases) + '"', end = '')
-			print()
-
-	def get_ports(self, flags = 0):
-		return [
-			self.get_port_by_name(name) \
-			for name in c_char_p_p_to_list(
-				jacklib.get_ports(self.client, '', '', flags))
-		]
-
-	def pysical_input_ports(self):
-		return self.get_ports(jacklib.JackPortIsInput | jacklib.JackPortIsPhysical)
-
-	def pysical_output_ports(self):
-		return self.get_ports(jacklib.JackPortIsOutput | jacklib.JackPortIsPhysical)
-
-	def close(self):
-		if self.client:
-			jacklib.deactivate(self.client)
-			jacklib.client_close(self.client)
-
 
 class JackPort:
 
@@ -161,6 +43,33 @@ class JackPort:
 	def is_output(self):
 		return self.flags & jacklib.JackPortIsOutput
 
+	@property
+	def client_name(self):
+		return self._split_name[0]
+
+	@property
+	def port_name(self):
+		return self._split_name[1]
+
+	@cached_property
+	def type(self):
+		return jacklib.port_type(self.ptr)
+
+	@property
+	def is_midi(self):
+		return 'midi' in self.type
+
+	@property
+	def is_audio(self):
+		return 'audio' in self.type
+
+	@cached_property
+	def _split_name(self):
+		try:
+			return self.name.split(':', 1)
+		except ValueError:
+			return ('[error]', '[error]')
+
 	def __str__(self):
 		return '<JackPort "{}" ({}, {})>'.format(
 			self.name,
@@ -169,9 +78,149 @@ class JackPort:
 		)
 
 
-
 class JackConnectError(RuntimeError):
 	pass
 
+
+class JackConnectionManager(QObject):
+
+	sig_error = pyqtSignal(str)
+	sig_port_reg = pyqtSignal(JackPort, int)
+	sig_port_connect = pyqtSignal(JackPort, JackPort, bool)
+	sig_port_rename = pyqtSignal(JackPort, str, str)
+	sig_xrun = pyqtSignal()
+	sig_shutdown = pyqtSignal()
+
+	instance = None
+	client = None
+
+	# ------------------------------
+	# Lifecycle funcs
+
+	def __new__(cls):
+		if cls.instance is None:
+			cls.instance = super().__new__(cls)
+		return cls.instance
+
+	def __init__(self):
+		if self.client is None:
+			super().__init__()
+			self.connected = True
+			self.client_name = 'conn-man'
+			logging.debug('Connecting')
+			status = jacklib.jack_status_t()
+			self.client = jacklib.client_open(self.client_name, jacklib.JackNoStartServer, status)
+			if status.value:
+				raise JackConnectError(get_jack_status_error_string(status))
+			if not self.client:
+				raise JackConnectError('No client created')
+			name = jacklib.get_client_name(self.client)
+			if name is None:
+				raise RuntimeError("Could not get JACK client name.")
+			else:
+				self.client_name = name.decode()
+			self.queue = Queue()
+			jacklib.on_shutdown(self.client, self.shutdown_callback, None)
+			logging.debug("Client connected, name: %s UUID: %s",
+				self.client_name, jacklib.client_get_uuid(self.client))
+			jacklib.set_error_function(self.error_callback)
+			jacklib.set_port_registration_callback(self.client, self.port_registration_callback, None)
+			jacklib.set_port_connect_callback(self.client, self.port_connect_callback, None)
+			jacklib.set_port_rename_callback(self.client, self.port_rename_callback, None)
+			jacklib.set_xrun_callback(self.client, self.xrun_callback, None)
+			jacklib.activate(self.client)
+
+	def close(self):
+		if self.client:
+			jacklib.deactivate(self.client)
+			jacklib.client_close(self.client)
+
+	# ------------------------------
+	# Callbacks
+
+	def error_callback(self, error):
+		self.sig_error.emit(error.decode(jacklib.ENCODING, errors='ignore'))
+
+	def port_registration_callback(self, port_id, action, *args):
+		self.sig_port_reg.emit(self.get_port_by_id(port_id), action)
+
+	def port_connect_callback(self, port_a_id, port_b_id, connect, *args):
+		self.sig_port_connect.emit(
+			self.get_port_by_id(port_a_id),
+			self.get_port_by_id(port_b_id),
+			bool(connect)
+		)
+
+	def port_rename_callback(self, port_id, old_name, new_name, *args):
+		self.sig_port_rename.emit(
+			self.get_port_by_id(port_id),
+			old_name.decode(jacklib.ENCODING, errors='ignore') if old_name else 'NO_OLD_NAME',
+			new_name.decode(jacklib.ENCODING, errors='ignore') if new_name else 'NO_OLD_NAME'
+		)
+
+	def xrun_callback(self, *args):
+		self.sig_xrun.emit()
+
+	def shutdown_callback(self, *args):
+		self.sig_shutdown.emit()
+		self.client = None
+
+	# ------------------------------
+	# Port / connection info funcs
+
+	def get_ports(self, flags = 0):
+		return [
+			self.get_port_by_name(name) \
+			for name in c_char_p_p_to_list(
+				jacklib.get_ports(self.client, '', '', flags))
+		]
+
+	def get_port_by_name(self, name):
+		ptr = jacklib.port_by_name(self.client, name)
+		return JackPort(ptr, name)
+
+	def get_port_by_id(self, port_id):
+		ptr = jacklib.port_by_id(self.client, port_id)
+		return JackPort(ptr, jacklib.port_name(ptr))
+
+	def get_connections(self, ports = None):
+		if ports is None:
+			ports = self.get_ports()
+		for port in ports:
+			if jacklib.port_connected(port.ptr):
+				for port_name in jacklib.port_get_all_connections(self.client, port.ptr):
+					yield((port, self.get_port_by_name(port_name)))
+
+	def list_connections(self):
+		print('==== CONNECTIONS ====')
+		for outport, inport in self.get_connections():
+			print("%s\n    %s" % (outport, inport))
+
+	def list_ports(self):
+		print('==== INPUT PORTS ====')
+		self._list_ports(jacklib.JackPortIsInput)
+		print('==== OUTPUT PORTS ====')
+		self._list_ports(jacklib.JackPortIsOutput)
+
+	def _list_ports(self, flags):
+		for port in self.get_ports(flags):
+			print(port.name, end = "")
+			if port.aliases:
+				print('; alias "' + '", "'.join(port.aliases) + '"', end = '')
+			print()
+
+	def physical_input_ports(self):
+		return self.get_ports(jacklib.JackPortIsInput | jacklib.JackPortIsPhysical)
+
+	def physical_output_ports(self):
+		return self.get_ports(jacklib.JackPortIsOutput | jacklib.JackPortIsPhysical)
+
+	def playback_clients(self):
+		return set([port.client_name \
+			for port in self.get_ports(jacklib.JackPortIsInput | jacklib.JackPortIsPhysical) \
+			if not port.is_midi])
+
+	def connect(self, outport, inport):
+		jacklib.connect(self.client, outport.ptr, inport.ptr)
 
 #  end kitbash/connection_manager.py
