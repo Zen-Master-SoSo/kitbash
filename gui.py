@@ -140,7 +140,7 @@ class MainWindow(QMainWindow):
 			self.looper.signals.sig_state_changed.connect(self.looper_widget.play_button.setChecked)
 			self.looper_port_widgets = {}	# dict of DrumKitWidget, indexed on Jack.OwnMidiPort.name
 			# Setup synth - see slot_jack_port_registration
-			self.synth = Synth()
+			self.synth = Synth('MainWindow')
 			self.synth.sig_ready.connect(self.synth_ready)
 			self.create_bashed_sfz()
 			# Modify UI
@@ -410,7 +410,7 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(JackPort, int)
 	def slot_jack_port_registration(self, port, action):
-		logging.debug('%s %s', port, 'registered' if action else 'gone')
+		logging.info('%s %s', port, 'registered' if action else 'gone')
 		if action and 'liquidsfz' in port.name:
 			Synth.port_registered(port)
 
@@ -430,7 +430,7 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def slot_jack_xrun(self):
-		logging.warning('Xrun')
+		logging.info('Xrun')
 
 	# -----------------------------------------------------------------
 	# QMainWindow overloads (see also: "timerEvent")

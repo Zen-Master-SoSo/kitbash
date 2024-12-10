@@ -46,7 +46,7 @@ class DrumKitWidget(QFrame):
 		if parent.options.no_audio:
 			self.synth = None
 		else:
-			self.synth = Synth()
+			self.synth = Synth(self.moniker)
 			self.synth.sig_ready.connect(self.synth_ready)
 			self.synth.load(self.filename)
 
