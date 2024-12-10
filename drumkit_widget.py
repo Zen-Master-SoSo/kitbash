@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import QPushButton
 from qt_extras import SigBlock
 from liquiphy import LiquidSFZ
 from kitbash import PACKAGE_DIR
+from kitbash.synth import Synth
 from kitbash.icons import (
 	ICON_EXPANDED,
 	ICON_HIDDEN,
@@ -45,8 +46,9 @@ class DrumKitWidget(QFrame):
 		if parent.options.no_audio:
 			self.synth = None
 		else:
-			self.synth = QtLiquidJack(self.filename)
+			self.synth = Synth()
 			self.synth.sig_ready.connect(self.synth_ready)
+			self.synth.load(self.filename)
 
 		self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 		self.setFrameStyle(QFrame.Panel)
@@ -110,7 +112,7 @@ class DrumKitWidget(QFrame):
 	@pyqtSlot()
 	def synth_ready(self):
 		"""
-		Received from QtLiquidJack when ready to play.
+		Received from Synth when ready to play.
 		Notifies MainWindow so the MultiPortLooper can connect a new port to this
 		widget's synth.
 		"""
@@ -134,14 +136,6 @@ class DrumKitWidget(QFrame):
 				group_frame.group_layout.addWidget(inst_button)
 			group_frame.group_layout.addStretch()
 			self.groups.addWidget(group_frame)
-
-	def set_looper_jack_port(self, port_number, port_name):
-		"""
-		Called from gui after synth ready.
-		port_number, port_name are used Jack.MidiOwnPort.register()
-		"""
-		self.port_number = port_number
-		self.port_name = port_name
 
 	@pyqtSlot(QFrame)
 	def group_clicked(self, group_frame):
@@ -191,9 +185,17 @@ class DrumKitWidget(QFrame):
 			button.parentWidget().findChild(GroupButton).setChecked(False)
 			self.update_count()
 
+	def selected_instrument_ids(self):
+		"""
+		Returns a list of instrument ids from selected instrument buttons.
+		"""
+		return [ button.inst_id \
+				for button in self.findChildren(InstrumentButton) \
+				if button.isChecked() ]
+
 	def saved_selections(self):
 		"""
-		Returns dictionary of button states.
+		Returns dictionary of button states for saving with project.
 		"""
 		return {
 			group_frame.group_id : {
@@ -207,6 +209,9 @@ class DrumKitWidget(QFrame):
 		}
 
 	def apply_selections(self, selections):
+		"""
+		Restores button states from dictionary when loading project.
+		"""
 		for group_frame in self.findChildren(GroupFrame):
 			if group_frame.group_id in selections:
 				sel = selections[group_frame.group_id]
@@ -223,23 +228,6 @@ class DrumKitWidget(QFrame):
 
 	def __str__(self):
 		return f"<DrumKitWidget {self.moniker}>"
-
-
-class QtLiquidJack(LiquidJack, QObject):
-
-	sig_ready = pyqtSignal()
-
-	def __init__(self, filename = None):
-		LiquidJack.__init__(self, filename)
-		QObject.__init__(self)
-
-	def port_registration_callback(self, port, register):
-		if self.midi_in is None or self.audio_out_1 is None or self.audio_out_2 is None:
-			super().port_registration_callback(port, register)
-			if self.midi_in is None or self.audio_out_1 is None or self.audio_out_2 is None:
-				return
-			logging.debug('QtLiquidJack emitting sig_ready')
-			self.sig_ready.emit()
 
 
 class TitleFrame(QFrame):

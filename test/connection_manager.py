@@ -17,19 +17,18 @@ class MainWindow(QMainWindow):
 		self.quit_shortcut.activated.connect(self.close)
 		self.conn_man = JackConnectionManager()
 		self.conn_man.sig_error.connect(self.slot_error)
-		self.conn_man.sig_port_reg.connect(self.slot_port_reg)
+		self.conn_man.sig_port_registration.connect(self.slot_port_registration)
 		self.conn_man.sig_port_connect.connect(self.slot_port_connect)
 		self.conn_man.sig_port_rename.connect(self.slot_port_rename)
 		self.conn_man.sig_xrun.connect(self.slot_xrun)
 		self.conn_man.sig_shutdown.connect(self.slot_shutdown)
-		print(self.conn_man.playback_clients())
 
 	@pyqtSlot()
 	def slot_error(self, error):
 		logging.error(error)
 
 	@pyqtSlot(JackPort, int)
-	def slot_port_reg(self, port, action):
+	def slot_port_registration(self, port, action):
 		logging.debug('%s %s', port, 'register' if action else 'gone')
 
 	@pyqtSlot(JackPort, JackPort, bool)

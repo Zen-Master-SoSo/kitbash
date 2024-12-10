@@ -42,10 +42,10 @@ class MultiPortLooper(Looper):
 		self.client.set_samplerate_callback(self._samplerate_callback)
 		self.client.set_process_callback(self._process_callback)
 		self.client.set_shutdown_callback(self._shutdown_callback)
-		self.client.set_xrun_callback(self._xrun_callback)
 		self.client.activate()
-		logging.debug('Connected as %s', self.client)
+		logging.debug('Looper client "%s"', self.client.name)
 		self.client.get_ports()
+		self.bashed_port = self.client.midi_outports.register('bashed')
 
 	def add_port(self):
 		"""
@@ -86,6 +86,7 @@ class MultiPortLooper(Looper):
 
 	def _play_process_callback(self, frames):
 		if self.any_loop_active():
+			self.bashed_port.clear_buffer()
 			for port in self.out_ports.values():
 				port.clear_buffer()
 			last_beat = self.beat + self.beats_per_process
@@ -95,6 +96,7 @@ class MultiPortLooper(Looper):
 				if len(events_this_block):
 					for evt in np.sort(events_this_block, kind="heapsort", order="beat"):
 						offset = int((evt['beat'] - self.beat) * self.samples_per_beat)
+						self.bashed_port.write_midi_event(offset, evt['msg'])
 						port_number = self.pitch_maps[evt['msg'][1]]
 						if not port_number is None:
 							self.out_ports[port_number].write_midi_event(offset, evt['msg'])
@@ -112,6 +114,7 @@ class MultiPortLooper(Looper):
 		"""
 		msg = bytearray.fromhex('B07B')
 		for channel in range(16):
+			self.bashed_port.write_midi_event(0, msg)
 			for port in self.out_ports.values():
 				port.clear_buffer()
 				port.write_midi_event(0, msg)

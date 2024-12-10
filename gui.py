@@ -8,15 +8,13 @@ import argparse
 import logging
 import json
 import glob
-from collections import deque
+from tempfile import mkstemp
 from functools import partial
 from signal import signal, SIGINT, SIGTERM
-import jacklib
 from recent_items_list import RecentItemsList
 from qt_extras import ShutUpQT, DevilBox
 from qt_extras.list_layout import VListLayout
 from midi_notes import MIDI_DRUM_PITCHES
-from liquiphy import LiquidSFZ as _LiquidSFZ
 from jack_midi_looper.looper_widget import LooperWidget
 
 # PyQt5 imports
@@ -52,6 +50,7 @@ from kitbash import (
 from kitbash.looper import MultiPortLooper
 from kitbash.drumkit import Drumkit
 from kitbash.drumkit_widget import DrumKitWidget
+from kitbash.synth import Synth
 from kitbash.icons import (
 	PIXMAP_AUDIO_OFF,
 	PIXMAP_AUDIO_ON
@@ -87,55 +86,66 @@ class MainWindow(QMainWindow):
 			self.restoreGeometry(geometry)
 		self.recent_projects = RecentItemsList(self.settings.value("recent_projects", defaultValue=[]))
 		self.recent_drumkits = RecentItemsList(self.settings.value("recent_drumkits", defaultValue=[]))
+		self.project_file = None
+		self.project_definition = None
+		self.project_clearing = False
+		self.project_loading = False
+		self._dirty = False
+
+		signal(SIGINT, self.system_signal)
+		signal(SIGTERM, self.system_signal)
 
 		self.threadpool = QThreadPool()
 		self.threadpool.setMaxThreadCount(2)
-
-		if self.options.no_audio:
-			self.frm_looper.hide()
-			self.looper = None
-			self.lbl_audio_indicator.hide()
-
-		else:
-			self.conn_man = JackConnectionManager()
-			self.conn_man.sig_error.connect(self.slot_jack_error)
-			self.conn_man.sig_port_reg.connect(self.slot_jack_port_reg)
-			self.conn_man.sig_port_connect.connect(self.slot_jack_port_connect)
-			self.conn_man.sig_port_rename.connect(self.slot_jack_port_rename)
-			self.conn_man.sig_xrun.connect(self.slot_jack_xrun)
-			self.conn_man.sig_shutdown.connect(self.slot_jack_shutdown)
-			self.liquid_instances = deque()
-			self.bashed_synth = LiquidSFZ()
-			self.liquid_instances.append(self.bashed_synth)
-			self.looper = MultiPortLooper()
-			self.looper_widget = LooperWidget(self, loops_database(), self.looper)
-			self.looper_widget.single_loop = True
-			self.looper_widget.columns = 8
-			self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-			self.frm_looper.layout().addWidget(self.looper_widget)
-			self.looper.signals.sig_state_changed.connect(self.looper_widget.play_button.setChecked)
-			self.looper_port_widgets = {}	# dict of DrumKitWidget, indexed on Jack.OwnMidiPort.name
-			self.audio_playback_client = None
-			self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
-
-		self.drumkit_widgets = VListLayout(end_space = 10)
-		self.drumkit_widgets.setContentsMargins(0,0,0,0)
-		self.drumkit_widgets.setSpacing(2)
-		self.kits_area.setLayout(self.drumkit_widgets)
 
 		self.fill_style_menu()
 		self.load_current_style()
 		self.show_hide_window_elements()
 		self.connect_actions()
 
-		signal(SIGINT, self.system_signal)
-		signal(SIGTERM, self.system_signal)
+		self.drumkit_widgets = VListLayout(end_space = 10)
+		self.drumkit_widgets.setContentsMargins(0,0,0,0)
+		self.drumkit_widgets.setSpacing(2)
+		self.kits_area.setLayout(self.drumkit_widgets)
 
-		self.project_file = None
-		self.project_definition = None
-		self.project_clearing = False
-		self.project_loading = False
-		self._dirty = False
+		if self.options.no_audio:
+			self.conn_man = None
+			self.looper = None
+			self.synth = None
+			self.frm_looper.hide()
+			self.lbl_audio_indicator.hide()
+
+		else:
+			# Setup JackConnectionManager
+			self.conn_man = JackConnectionManager()
+			self.conn_man.sig_error.connect(self.slot_jack_error)
+			self.conn_man.sig_port_registration.connect(self.slot_jack_port_registration)
+			self.conn_man.sig_port_connect.connect(self.slot_jack_port_connect)
+			self.conn_man.sig_port_rename.connect(self.slot_jack_port_rename)
+			self.conn_man.sig_xrun.connect(self.slot_jack_xrun)
+			self.conn_man.sig_shutdown.connect(self.slot_jack_shutdown)
+			# Select audio playback client:
+			playback_clients = self.conn_man.playback_clients()
+			if playback_clients:
+				client_name = playback_clients[0]
+				self.lbl_audio_client.setText(client_name)
+			else:
+				logging.warning('No physical playback client found')
+			# Setup looper
+			self.looper = MultiPortLooper()
+			self.looper_widget = LooperWidget(self, loops_database(), self.looper)
+			self.looper_widget.single_loop = True
+			self.looper_widget.columns = 8
+			self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+			self.looper.signals.sig_state_changed.connect(self.looper_widget.play_button.setChecked)
+			self.looper_port_widgets = {}	# dict of DrumKitWidget, indexed on Jack.OwnMidiPort.name
+			# Setup synth - see slot_jack_port_registration
+			self.synth = Synth()
+			self.synth.sig_ready.connect(self.synth_ready)
+			self.create_bashed_sfz()
+			# Modify UI
+			self.frm_looper.layout().addWidget(self.looper_widget)
+			self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
 
 		QTimer.singleShot(0, self.layout_complete)
 
@@ -346,13 +356,14 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(QObject)
 	def drumkit_synth_ready(self, drumkit_widget):
-		logging.debug('MainWindow %s synth ready', drumkit_widget)
+		logging.debug('%s synth ready', drumkit_widget)
 		drumkit_widget.port_number, drumkit_widget.port_name = self.looper.add_port()
 		self.looper_port_widgets[drumkit_widget.port_name] = drumkit_widget
-		if self.audio_playback_client is None:
-			self.select_audio_playback_client()
-		logging.debug('here is where we connect drumkit synth to audio out')
-		drumkit_widget.synth.connect_outputs_to(self.audio_playback_client)
+		src_port = self.conn_man.get_port_by_name(drumkit_widget.port_name)
+		if src_port:
+			self.conn_man.connect(src_port, drumkit_widget.synth.midi_in_port)
+		else:
+			logging.error('Did not find %s synth port "%s"', drumkit_widget, drumkit_widget.port_name)
 
 	@pyqtSlot(QObject)
 	def slot_remove_drumkit(self, drumkit_widget):
@@ -368,17 +379,27 @@ class MainWindow(QMainWindow):
 			if widget.filename == filename:
 				return widget
 
-	def select_audio_playback_client(self):
-		client_name = self.looper.first_physical_playback_client()
-		if client_name is None:
-			logging.warning('No physical playback client found')
+	@pyqtSlot()
+	def synth_ready(self):
+		"""
+		Received from (Synth) self.synth when ready to play.
+		"""
+		src_port = self.conn_man.get_port_by_name('looper:bashed')
+		if src_port:
+			self.conn_man.connect(src_port, self.synth.midi_in_port)
 		else:
-			logging.debug('Found physical playback client "%s"', client_name)
-			self.lbl_audio_client.setText(client_name)
+			logging.error('Did not find %s synth port "%s"', self, 'looper:bashed')
 
-	def first_physical_playback_client(self):
-		for port in self.client.get_ports(is_audio=True, is_input=True, is_physical=True):
-			return port.name.split(':')[0]
+	def create_bashed_sfz(self):
+		bashed = Drumkit()
+		for drumkit_widget in self.drumkit_widgets:
+			for inst_id in drumkit_widget.selected_instrument_ids():
+				bashed.import_instrument(inst_id, drumkit_widget.drumkit)
+		fh, self.bashed_sfz_filename = mkstemp(prefix='kitbash', suffix='.sfz', text=True)
+		with open(self.bashed_sfz_filename, 'w') as fob:
+			bashed.write(fob)
+		logging.debug('Created temporary .sfz at %s', self.bashed_sfz_filename)
+		self.synth.load(self.bashed_sfz_filename)
 
 	# -----------------------------------------------------------------
 	# JackConnectionManager slots
@@ -388,20 +409,10 @@ class MainWindow(QMainWindow):
 		logging.error(error)
 
 	@pyqtSlot(JackPort, int)
-	def slot_jack_port_reg(self, port, action):
-		logging.debug('%s %s', port, 'register' if action else 'gone')
+	def slot_jack_port_registration(self, port, action):
+		logging.debug('%s %s', port, 'registered' if action else 'gone')
 		if action and 'liquidsfz' in port.name:
-			synth = self.liquid_instances[0]
-			if port.is_input and port.is_midi:
-				synth.midi_in = port
-			elif port.is_output and port.is_audio:
-				synth.audio_outs.append(port)
-			else:
-				logging.warning('Incorrect port type: %s', port)
-			if len(synth.audio_outs) == 2 and not synth.midi_in is None:
-				self.liquid_instances.popleft()
-				self.conn_man.connect(self.looper.)
-
+			Synth.port_registered(port)
 
 	@pyqtSlot(JackPort, JackPort, bool)
 	def slot_jack_port_connect(self, port_a, port_b, connect):
@@ -427,7 +438,7 @@ class MainWindow(QMainWindow):
 	def closeEvent(self, event):
 		logging.debug('MainWindow close()')
 		if not self.options.no_audio:
-			self.conn_man.quit()
+			self.synth.quit()
 			for drumkit_widget in self.drumkit_widgets:
 				drumkit_widget.synth.quit()
 		self.settings.setValue("geometry", self.saveGeometry())
@@ -589,14 +600,6 @@ class KitLoader(QRunnable):
 		self.drumkit_widget.drumkit = Drumkit(self.drumkit_widget.filename)
 		self.signals.sig_complete.emit(self.drumkit_widget)
 
-
-class LiquidSFZ(_LiquidSFZ):
-
-	midi_in = None
-	audio_outs = []
-
-	def ports_filled(self):
-		return len(self.audio_outs) == 2 and not self.midi_in is None
 
 # -----------------------------------------------------------------
 # main()

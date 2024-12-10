@@ -85,7 +85,7 @@ class JackConnectError(RuntimeError):
 class JackConnectionManager(QObject):
 
 	sig_error = pyqtSignal(str)
-	sig_port_reg = pyqtSignal(JackPort, int)
+	sig_port_registration = pyqtSignal(JackPort, int)
 	sig_port_connect = pyqtSignal(JackPort, JackPort, bool)
 	sig_port_rename = pyqtSignal(JackPort, str, str)
 	sig_xrun = pyqtSignal()
@@ -142,7 +142,7 @@ class JackConnectionManager(QObject):
 		self.sig_error.emit(error.decode(jacklib.ENCODING, errors='ignore'))
 
 	def port_registration_callback(self, port_id, action, *args):
-		self.sig_port_reg.emit(self.get_port_by_id(port_id), action)
+		self.sig_port_registration.emit(self.get_port_by_id(port_id), action)
 
 	def port_connect_callback(self, port_a_id, port_b_id, connect, *args):
 		self.sig_port_connect.emit(
@@ -155,11 +155,12 @@ class JackConnectionManager(QObject):
 		self.sig_port_rename.emit(
 			self.get_port_by_id(port_id),
 			old_name.decode(jacklib.ENCODING, errors='ignore') if old_name else 'NO_OLD_NAME',
-			new_name.decode(jacklib.ENCODING, errors='ignore') if new_name else 'NO_OLD_NAME'
+			new_name.decode(jacklib.ENCODING, errors='ignore') if new_name else 'NO_NEW_NAME'
 		)
 
-	def xrun_callback(self, *args):
+	def xrun_callback(self, arg):
 		self.sig_xrun.emit()
+		return 0
 
 	def shutdown_callback(self, *args):
 		self.sig_shutdown.emit()
@@ -216,9 +217,9 @@ class JackConnectionManager(QObject):
 		return self.get_ports(jacklib.JackPortIsOutput | jacklib.JackPortIsPhysical)
 
 	def playback_clients(self):
-		return set([port.client_name \
+		return list(set([port.client_name \
 			for port in self.get_ports(jacklib.JackPortIsInput | jacklib.JackPortIsPhysical) \
-			if not port.is_midi])
+			if not port.is_midi]))
 
 	def connect(self, outport, inport):
 		jacklib.connect(self.client, outport.ptr, inport.ptr)

@@ -117,14 +117,14 @@ class PercussionInstrument:
 		Returns a set of all the string representation (including name and value) of
 		all the opcodes used in this Instrument.
 		"""
-		return reduce(or_, [region.opstrs for region in self.regions])
+		return reduce(or_, [region.opstrs for region in self.regions], [])
 
 	def common_opstrings(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the identical opcodes used in every region in this Instrument.
 		"""
-		return reduce(and_, [region.opstrs for region in self.regions])
+		return reduce(and_, [region.opstrs for region in self.regions], [])
 
 	def regions_using_opcode(self, opstr):
 		"""
@@ -191,14 +191,14 @@ class PercussionGroup:
 		Returns a set of all the string representation (including name and value) of
 		all the opcodes used by all Instruments in this Group.
 		"""
-		return reduce(or_, [instrument.opcodes_used() for instrument in self.instruments.values()])
+		return reduce(or_, [instrument.opcodes_used() for instrument in self.instruments.values()], [])
 
 	def common_opstrings(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the identical opcodes used in every region in this Group.
 		"""
-		return reduce(and_, [instrument.opcodes_used() for instrument in self.instruments.values()])
+		return reduce(and_, [instrument.opcodes_used() for instrument in self.instruments.values()], [])
 
 	def regions_using_opcode(self, opstr):
 		"""
@@ -215,7 +215,8 @@ class PercussionGroup:
 		"""
 		return reduce(
 			lambda a,b: set(a) | set(b),
-			[ instrument.samples() for instrument in self.instruments.values() ]
+			[ instrument.samples() for instrument in self.instruments.values() ],
+			[]
 		)
 
 
@@ -359,14 +360,14 @@ class Drumkit:
 		Returns a set of all the string representation (including name and value) of
 		all the opcodes used in this Drumkit
 		"""
-		return reduce(or_, [group.opcodes_used() for group in self.groups.values()])
+		return reduce(or_, [group.opcodes_used() for group in self.groups.values()], [])
 
 	def common_opstrings(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the identical opcodes used in every region in this Drumki.
 		"""
-		return reduce(and_, [group.opcodes_used() for group in self.groups.values()])
+		return reduce(and_, [group.opcodes_used() for group in self.groups.values()], [])
 
 	def regions_using_opcode(self, opstr):
 		"""
@@ -392,6 +393,7 @@ class Drumkit:
 		Returns tuple:
 			(int) pitch
 			(str) instrument_id
+		"arg" may be a pitch or an instrument id string (i.e. "side_stick").
 		"""
 		if arg in MIDI_DRUM_IDS:
 			return arg, MIDI_DRUM_IDS[arg]
@@ -402,8 +404,7 @@ class Drumkit:
 	def instrument(self, arg):
 		"""
 		Returns a PercussionInstrument.
-
-		"arg" may bea pitch or an instrument id string (i.e. "side_stick").
+		"arg" may be a pitch or an instrument id string (i.e. "side_stick").
 
 		Raises IndexError if the instrument is not found in this Drumkit.
 		"""
