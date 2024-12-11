@@ -10,7 +10,6 @@ from collections import deque
 from liquiphy import LiquidSFZ
 from PyQt5.QtCore import (
 	pyqtSignal,
-	pyqtSlot,
 	QObject
 )
 
@@ -25,6 +24,9 @@ class Synth(QObject):
 	queue = deque()
 
 	def __init__(self, moniker):
+		"""
+		Appends this Synth to the queue BEFORE the LiquidSFZ process is started.
+		"""
 		Synth.queue.append(self)
 		self.moniker = moniker
 		self.midi_in_port = None
@@ -40,6 +42,12 @@ class Synth(QObject):
 
 	@classmethod
 	def port_registered(cls, port):
+		"""
+		Function called from MainWindow, in response to ConnectionManager port
+		registration callbacks. Populates the ports of the synth at the front of the
+		queue. When all ports are accounted for, pops the queue so that the next synth
+		can be instantiated.
+		"""
 		synth = cls.queue[0]
 		logging.debug('Synth %s port_registered: %s', synth.moniker, port)
 		if port.is_input and port.is_midi:
@@ -49,11 +57,14 @@ class Synth(QObject):
 		else:
 			logging.warning('Incorrect port type: %s', port)
 		if len(synth.audio_outs) == 2 and not synth.midi_in_port is None:
-			logging.debug('Popping Synth.queue')
+			logging.debug('Synth %s ports complete - popping Synth.queue', synth.moniker)
 			cls.queue.popleft()
 			synth.sig_ready.emit()
 
 	def quit(self):
+		"""
+		Gracefully quits the contained LiquidSFZ instance.
+		"""
 		if self._liquid:
 			self._liquid.quit()
 

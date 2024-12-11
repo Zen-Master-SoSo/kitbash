@@ -45,9 +45,13 @@ from PyQt5.QtWidgets import (
 from kitbash import (
 	loops_database,
 	APPLICATION_NAME,
-	PACKAGE_DIR
+	PACKAGE_DIR,
+	LOOPER_CLIENT_NAME,
+	LOOPER_PORT_NAME,
+	LOOPER_PORT_FORMAT,
+	LOOPER_BASHED_PORT
 )
-from kitbash.looper import MultiPortLooper
+from kitbash.looper import KitbashLooper
 from kitbash.drumkit import Drumkit
 from kitbash.drumkit_widget import DrumKitWidget
 from kitbash.synth import Synth
@@ -86,6 +90,7 @@ class MainWindow(QMainWindow):
 			self.restoreGeometry(geometry)
 		self.recent_projects = RecentItemsList(self.settings.value("recent_projects", defaultValue=[]))
 		self.recent_drumkits = RecentItemsList(self.settings.value("recent_drumkits", defaultValue=[]))
+		self.bashed_sfz_filename = None
 		self.project_file = None
 		self.project_definition = None
 		self.project_clearing = False
@@ -132,7 +137,7 @@ class MainWindow(QMainWindow):
 			else:
 				logging.warning('No physical playback client found')
 			# Setup looper
-			self.looper = MultiPortLooper()
+			self.looper = KitbashLooper()
 			self.looper_widget = LooperWidget(self, loops_database(), self.looper)
 			self.looper_widget.single_loop = True
 			self.looper_widget.columns = 8
@@ -142,7 +147,7 @@ class MainWindow(QMainWindow):
 			# Setup synth - see slot_jack_port_registration
 			self.synth = Synth('MainWindow')
 			self.synth.sig_ready.connect(self.synth_ready)
-			self.create_bashed_sfz()
+			self.compile_bashed_sfz()
 			# Modify UI
 			self.frm_looper.layout().addWidget(self.looper_widget)
 			self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
@@ -185,20 +190,6 @@ class MainWindow(QMainWindow):
 	def layout_complete(self):
 		pass
 
-	@pyqtSlot(QObject, str, bool, bool)
-	def slot_inst_toggle(self, source_widget, inst_id, state, ctrl_state):
-		if state and not ctrl_state:
-			for drumkit_widget in self.drumkit_widgets:
-				if not drumkit_widget is source_widget:
-					drumkit_widget.deselect_instrument(inst_id)
-		elif not state:
-			source_widget.deselect_parent_group(inst_id)
-		if self.looper:
-			self.looper.set_mapping(
-				MIDI_DRUM_PITCHES[inst_id],
-				source_widget.port_number if state else None)
-		self.set_dirty()
-
 	# -----------------------------------------------------------------
 	# Style functions:
 
@@ -238,9 +229,6 @@ class MainWindow(QMainWindow):
 
 	# -----------------------------------------------------------------
 	# Project loading / saving:
-
-	def compile_sfz_parts(self):
-		raise NotImplementedError()
 
 	def set_dirty(self, state=True):
 		if not self.project_loading:
@@ -390,23 +378,44 @@ class MainWindow(QMainWindow):
 		else:
 			logging.error('Did not find %s synth port "%s"', self, 'looper:bashed')
 
-	def create_bashed_sfz(self):
-		bashed = Drumkit()
+	@pyqtSlot(QObject, str, bool, bool)
+	def slot_inst_toggle(self, source_widget, inst_id, state, ctrl_state):
+		b_preview.setChecked(False)
+		if state and not ctrl_state:
+			for drumkit_widget in self.drumkit_widgets:
+				if not drumkit_widget is source_widget:
+					drumkit_widget.deselect_instrument(inst_id)
+		elif not state:
+			source_widget.deselect_parent_group(inst_id)
+		if self.looper:
+			self.looper.set_mapping(
+				MIDI_DRUM_PITCHES[inst_id],
+				source_widget.port_number if state else None)
+		self.set_dirty()
+		b_preview.setEnabled(any(self.looper.pitch_maps.values())
+
+	def compile_bashed_sfz(self, filename = None, samples_mode = SAMPLES_SYMLINK):
 		for drumkit_widget in self.drumkit_widgets:
 			for inst_id in drumkit_widget.selected_instrument_ids():
-				bashed.import_instrument(inst_id, drumkit_widget.drumkit)
-		fh, self.bashed_sfz_filename = mkstemp(prefix='kitbash', suffix='.sfz', text=True)
+				bashed_kit.import_instrument(inst_id, drumkit_widget.drumkit)
+		if self.bashed_sfz_filename:
+			os.unlink(self.bashed_sfz_filename)
+		if filename:
+			self.bashed_sfz_filename = filename
+		else:
+			_, self.bashed_sfz_filename = mkstemp(prefix='kitbash', suffix='.sfz', text=True)
+		bashed_kit = Drumkit()
 		with open(self.bashed_sfz_filename, 'w') as fob:
-			bashed.write(fob)
-		logging.debug('Created temporary .sfz at %s', self.bashed_sfz_filename)
+			bashed_kit.write(fob, samples_mode)
+		logging.debug('Created .sfz at %s', self.bashed_sfz_filename)
 		self.synth.load(self.bashed_sfz_filename)
 
 	# -----------------------------------------------------------------
 	# JackConnectionManager slots
 
 	@pyqtSlot()
-	def slot_jack_error(self, error):
-		logging.error(error)
+	def slot_jack_error(self, *args):
+		logging.error('Jack error - %s', str(args))
 
 	@pyqtSlot(JackPort, int)
 	def slot_jack_port_registration(self, port, action):
@@ -417,7 +426,7 @@ class MainWindow(QMainWindow):
 	@pyqtSlot(JackPort, JackPort, bool)
 	def slot_jack_port_connect(self, port_a, port_b, connect):
 		logging.debug('%s port connection: %s -> %s',
-			('New' if connect else 'Closed'),
+			('New' if connect else 'Deleted'),
 			port_a, port_b)
 
 	@pyqtSlot(JackPort, str, str)
@@ -446,7 +455,7 @@ class MainWindow(QMainWindow):
 		event.accept()
 
 	# -----------------------------------------------------------------
-	# Signal handler
+	# System signal handler
 
 	def system_signal(self, *_):
 		logging.debug('Caught signal - shutting down')
@@ -458,8 +467,11 @@ class MainWindow(QMainWindow):
 	@pyqtSlot(bool)
 	def slot_preview_toggle(self, state):
 		"""
-		Select bashed sfz for play preview; deselect all drumkits
+		Select bashed sfz for play preview; deselect all drumkits.
 		"""
+		if state:
+			self.compile_bashed_sfz()
+		self.looper.bashed_exclusive = state
 
 	@pyqtSlot(QPoint)
 	def slot_kits_context_menu(self, position):
@@ -568,19 +580,6 @@ class MainWindow(QMainWindow):
 		)[0]
 		if filename != "":
 			self.load_drumkit(filename)
-
-	@pyqtSlot()
-	def slot_timer_timeout(self):
-		pass
-
-	def refresh_xruns(self, load, xruns):
-		pass
-
-	def refresh_buffer_size(self, size):
-		pass
-
-	def refresh_sample_rate(self, rate):
-		pass
 
 
 class KitLoaderSignals(QObject):

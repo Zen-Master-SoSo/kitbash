@@ -17,15 +17,16 @@ from PyQt5.QtWidgets import QShortcut
 from PyQt5.QtWidgets import QGroupBox
 from PyQt5.QtWidgets import QRadioButton
 from PyQt5.QtGui import QKeySequence
-
-NO_COPY		= 1
-COPY		= 2
-SYMLINK		= 3
-HARDLINK	= 4
+from kitbash import (
+	SAMPLES_RESOLVE,
+	SAMPLES_COPY,
+	SAMPLES_SYMLINK,
+	SAMPLES_HARDLINK
+)
 
 class FileSaveDialog(QFileDialog):
 
-	samples_mode = HARDLINK
+	samples_mode = SAMPLES_HARDLINK
 
 	def __init__(self, parent):
 		QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs)
@@ -36,18 +37,18 @@ class FileSaveDialog(QFileDialog):
 		lbl = QLabel()
 		self.layout().addWidget(lbl)
 		gb = QGroupBox('Sample location')
-		self.r_nocopy = QRadioButton('Point to the original samples')
+		self.r_resolve = QRadioButton('Point to the original samples')
 		self.r_copy = QRadioButton('Copy to a new "./samples" folder')
 		self.r_symlink = QRadioButton('Create symlinks in a new "./samples" folder')
 		self.r_hardlink = QRadioButton('Hardlink the originals in a new "./samples" folder')
-		self.r_nocopy.clicked.connect(partial(self.slot_mode, NO_COPY))
-		self.r_copy.clicked.connect(partial(self.slot_mode, COPY))
-		self.r_symlink.clicked.connect(partial(self.slot_mode, SYMLINK))
-		self.r_hardlink.clicked.connect(partial(self.slot_mode, HARDLINK))
+		self.r_resolve.clicked.connect(partial(self.slot_set_mode, SAMPLES_RESOLVE))
+		self.r_copy.clicked.connect(partial(self.slot_set_mode, SAMPLES_COPY))
+		self.r_symlink.clicked.connect(partial(self.slot_set_mode, SAMPLES_SYMLINK))
+		self.r_hardlink.clicked.connect(partial(self.slot_set_mode, SAMPLES_HARDLINK))
 		lo = QVBoxLayout()
 		lo.setContentsMargins(2,2,2,2)
 		lo.setSpacing(2)
-		lo.addWidget(self.r_nocopy)
+		lo.addWidget(self.r_resolve)
 		lo.addWidget(self.r_copy)
 		lo.addWidget(self.r_symlink)
 		lo.addWidget(self.r_hardlink)
@@ -56,7 +57,7 @@ class FileSaveDialog(QFileDialog):
 		self.layout().addWidget(gb)
 
 	@pyqtSlot(int, bool)
-	def slot_mode(self, mode, state):
+	def slot_set_mode(self, mode, state):
 		self.samples_mode = mode
 
 
@@ -93,13 +94,13 @@ class TestWindow(QMainWindow):
 			selected_files = file_dialog.selectedFiles()
 			if selected_files:
 				self.label.setText(f"Selected files: {', '.join(selected_files)}")
-				if file_dialog.samples_mode == COPY:
-					self.mode_label.setText('Copy the originals')
-				elif file_dialog.samples_mode == NO_COPY:
+				if file_dialog.samples_mode == SAMPLES_RESOLVE:
 					self.mode_label.setText('Point to the originals')
-				elif file_dialog.samples_mode == SYMLINK:
+				elif file_dialog.samples_mode == SAMPLES_COPY:
+					self.mode_label.setText('Copy the originals')
+				elif file_dialog.samples_mode == SAMPLES_SYMLINK:
 					self.mode_label.setText('Create symlinks to the originals')
-				elif file_dialog.samples_mode == HARDLINK:
+				elif file_dialog.samples_mode == SAMPLES_HARDLINK:
 					self.mode_label.setText('Hardlink the originals')
 			else:
 				self.label.setText("No files selected")

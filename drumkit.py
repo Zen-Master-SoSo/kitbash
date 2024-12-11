@@ -16,6 +16,26 @@ from midi_notes import Note, MIDI_DRUM_PITCHES, MIDI_DRUM_NAMES, MIDI_DRUM_IDS
 from sfzen import COMMENT_DIVIDER
 from sfzen import SFZ
 from sfzen.sfz_elems import Region as SFZRegion
+from sfzen.sfz_elems import Opcode as SFZOpcode
+from kitbash import (
+	SAMPLES_RESOLVE,
+	SAMPLES_COPY,
+	SAMPLES_SYMLINK,
+	SAMPLES_HARDLINK
+)
+
+class SampleOpcode(SFZOpcode):
+
+	def __init__(self, source_opcode, source_filename):
+		self.source_filename = source_filename
+		self._parsed_value = source_opcode._parsed_value
+		self.value = source_opcode._parsed_value
+
+	def resolve_path(self, target_filename = None):
+		p = Path(self._parsed_value)
+
+	def __str__(self):
+		return 'SAMPLE=%s' % (self.value)
 
 
 class Region(SFZRegion):
@@ -27,6 +47,8 @@ class Region(SFZRegion):
 	def __init__(self, source_region, source_filename):
 		self.subheaders = []
 		self._opcodes = source_region.inherited_opcodes()
+		if 'sample' in self.opcodes:
+			self.opcodes['sample'] = SampleOpcode(self.opcodes['sample'], source_filename)
 		self.filename = source_filename
 		self.line = source_region.line
 		self.column = source_region.column
@@ -99,7 +121,7 @@ class PercussionInstrument:
 		"""
 		stream.write(f'// {self.name}\n')
 		stream.write(f'// MIDI pitch: {self.note.pitch}  Note name: {self.note}\n')
-		stream.write(f'// Source file: {self.source_filename}\n\n')
+		stream.write(f'// Source: {self.source_filename}\n\n')
 		if len(self.regions) > 1:
 			common_opstrings = self.common_opstrings()
 			group_opcodes = common_opstrings - exclude_opstrs
@@ -112,21 +134,21 @@ class PercussionInstrument:
 		for region in self.regions:
 			region.write(stream, exclude_opstrs)
 
-	def opcodes_used(self):
+	def opstrings_used(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the opcodes used in this Instrument.
 		"""
-		return reduce(or_, [region.opstrs for region in self.regions], [])
+		return reduce(or_, [region.opstrs for region in self.regions], set())
 
 	def common_opstrings(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the identical opcodes used in every region in this Instrument.
 		"""
-		return reduce(and_, [region.opstrs for region in self.regions], [])
+		return reduce(and_, [region.opstrs for region in self.regions], set())
 
-	def regions_using_opcode(self, opstr):
+	def regions_using_opstring(self, opstr):
 		"""
 		Generator function which yields each Region which uses the opcode specified.
 		opstr: the string representation (including name and value) of an opcode.
@@ -135,12 +157,20 @@ class PercussionInstrument:
 			if region.uses_opstr(opstr):
 				yield region
 
+	def samples_used(self):
+		"""
+		Returns a set of all raw values of all "sample" opcodes contained in the
+		regions defined for this Instrument.
+		"""
+		return set(region.sample for region in self.regions if region.sample is not None)
+
 	def samples(self):
 		"""
-		Returns a list of the parsed values of all the "sample" opcodes contained in
-		the regions defined for this Instrument.
+		Generator which yields every sample opcode (Opcode class)
 		"""
-		return [ region.sample for region in self.regions if region.sample is not None ]
+		for region in self.regions:
+			if 'sample' in region.opcodes:
+				yield region.opcodes['sample']
 
 
 class PercussionGroup:
@@ -159,7 +189,7 @@ class PercussionGroup:
 
 	def append_instrument(self, pitch, regions, filename):
 		"""
-		Adds orreplaces an instrument in this group.
+		Adds or replaces an instrument in this group.
 		pitch:		(int)	MIDI note number
 		regions:	(list)	"region" header and contained opcodes from SFZ
 		filename:	(str)	Filename from the source SFZ
@@ -181,43 +211,46 @@ class PercussionGroup:
 		of all the opcodes NOT to define in this region, as they are common opcodes
 		defined in a parent header.
 		"""
-		stream.write(f'{COMMENT_DIVIDER}// {self.name}\n\n')
+		stream.write(f'{COMMENT_DIVIDER}// "{self.name}" group\n{COMMENT_DIVIDER}\n')
 		for inst in self.instruments.values():
 			if not inst.empty():
 				inst.write(stream, exclude_opstrs)
 
-	def opcodes_used(self):
+	def opstrings_used(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the opcodes used by all Instruments in this Group.
 		"""
-		return reduce(or_, [instrument.opcodes_used() for instrument in self.instruments.values()], [])
+		return reduce(or_, [instrument.opstrings_used() for instrument in self.instruments.values()], set())
 
 	def common_opstrings(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the identical opcodes used in every region in this Group.
 		"""
-		return reduce(and_, [instrument.opcodes_used() for instrument in self.instruments.values()], [])
+		return reduce(and_, [instrument.opstrings_used() for instrument in self.instruments.values()], set())
 
-	def regions_using_opcode(self, opstr):
+	def regions_using_opstring(self, opstr):
 		"""
 		Generator function which yields each Region which uses the opcode specified.
 		opstr: the string representation (including name and value) of an opcode.
 		"""
 		for instrument in self.instruments.values():
-			yield from instrument.regions_using_opcode(opstr)
+			yield from instrument.regions_using_opstring(opstr)
+
+	def samples_used(self):
+		"""
+		Returns a set of all raw values of all "sample" opcodes contained in the
+		regions defined for this Instrument.
+		"""
+		return reduce(or_, [ instrument.samples_used() for instrument in self.instruments.values() ], set())
 
 	def samples(self):
 		"""
-		Returns a list of the parsed values of all the "sample" opcodes contained in
-		the regions defined for this Instrument.
+		Generator which yields every sample opcode (Opcode class)
 		"""
-		return reduce(
-			lambda a,b: set(a) | set(b),
-			[ instrument.samples() for instrument in self.instruments.values() ],
-			[]
-		)
+		for instrument in self.instruments.values():
+			yield from instrument.samples()
 
 
 class Drumkit:
@@ -317,9 +350,16 @@ class Drumkit:
 						self.groups[group_id] = PercussionGroup(group_id)
 					self.groups[group_id].append_instrument(pitch, regions, filename)
 
-	def write(self, stream):
+	def write(self, stream, samples_mode):
 		"""
-		Write in SFZ format to any file-like object, including sys.stdout
+		Write in SFZ format to any file-like object, including sys.stdout.
+
+		"samples_mode" is a kibash constant which defines how to render "sample"
+		opcodes. May be one of:
+			SAMPLES_RESOLVE
+			SAMPLES_COPY
+			SAMPLES_SYMLINK
+			SAMPLES_HARDLINK
 		"""
 		stream.write(f'{COMMENT_DIVIDER}// {self.name}\n{COMMENT_DIVIDER}\n')
 		global_opcodes = self.common_opstrings()
@@ -355,38 +395,51 @@ class Drumkit:
 		self.groups[self.pitch_groups[pitch]].instruments[pitch] = \
 			deepcopy(source_kit.instrument(pitch))
 
-	def opcodes_used(self):
+	def opstrings_used(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the opcodes used in this Drumkit
 		"""
-		return reduce(or_, [group.opcodes_used() for group in self.groups.values()], [])
+		return reduce(or_, [group.opstrings_used() for group in self.groups.values()], set())
 
 	def common_opstrings(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the identical opcodes used in every region in this Drumki.
 		"""
-		return reduce(and_, [group.opcodes_used() for group in self.groups.values()], [])
+		return reduce(and_, [group.opstrings_used() for group in self.groups.values()], set())
 
-	def regions_using_opcode(self, opstr):
+	def regions_using_opstring(self, opstr):
 		"""
 		Generator function which yields each Region which uses the opcode specified.
 		opcode: the string representation (including name and value) of an opcode.
 		"""
 		for group in self.groups.values():
-			yield from group.regions_using_opcode(opstr)
+			yield from group.regions_using_opstring(opstr)
 
-	def opcode_usage(self):
+	def opstring_usage(self):
 		"""
 		Returns a dict of lists
 		Keys are the string representation of the opcode, (including name and value).
 		Values are a list of regions where it is used.
 		"""
 		return {
-			opstr:list(self.regions_using_opcode(opstr)) \
-			for opstr in self.opcodes_used()
+			opstr:list(self.regions_using_opstring(opstr)) \
+			for opstr in self.opstrings_used()
 		}
+
+	def samples(self):
+		"""
+		Generator which yields every sample opcode (Opcode class)
+		"""
+		for group in self.groups.values():
+			yield from group.samples()
+
+	def samples_used(self):
+		"""
+		Returns a set of all raw values of all "sample" opcodes used in this Drumkit.
+		"""
+		return reduce(or_, [group.samples_used() for group in self.groups.values()], set())
 
 	def instrument_ids(self, arg):
 		"""

@@ -2,22 +2,23 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
-import os, logging
-from math import ceil
+import logging
 import numpy as np
-from jack import Client, CallbackExit
+from jack import Client
 from PyQt5.QtCore import QObject
 from PyQt5.QtCore import pyqtSignal
 from jack_midi_looper import (
 	Looper,
 	Pause,
-	JackShutdownError,
 	DEFAULT_BEATS_PER_MINUTE
 )
-from kitbash import APPLICATION_NAME
+from kitbash import (
+	LOOPER_CLIENT_NAME,
+	LOOPER_PORT_FORMAT,
+	LOOPER_BASHED_PORT
+)
 
-
-class MultiPortLooper(Looper):
+class KitbashLooper(Looper):
 	"""
 	Extends jack_midi_looper.Looper. This class creates multiple MIDI ports, and
 	parcels out midi "Note On" events to each of them based on a "pitch" value.
@@ -25,7 +26,7 @@ class MultiPortLooper(Looper):
 	port_number = 0
 
 	def __init__(self):
-		self.client_name = 'looper'
+		self.client_name = LOOPER_CLIENT_NAME
 		self.signals = LooperSignals()
 		self._bpm = DEFAULT_BEATS_PER_MINUTE
 		self.beats_per_measure = None
@@ -43,24 +44,25 @@ class MultiPortLooper(Looper):
 		self.client.set_process_callback(self._process_callback)
 		self.client.set_shutdown_callback(self._shutdown_callback)
 		self.client.activate()
-		logging.debug('Looper client "%s"', self.client.name)
+		logging.debug('Looper client "%s" created', self.client.name)
 		self.client.get_ports()
-		self.bashed_port = self.client.midi_outports.register('bashed')
+		self.bashed_port = self.client.midi_outports.register(LOOPER_BASHED_PORT)
+		self.bashed_exclusive = False
 
 	def add_port(self):
 		"""
 		Called when adding drumkit. Each drumkit gets its own synth, and this
-		MultiPortLooper is connected to each synth via its own port.
+		KitbashLooper is connected to each synth via its own port.
 
 		Returns:
 			port_number:	(int) id number of the newly created port,
-			port_name:		(str) Jack port name
+			port_name:		(str) Jack port name, including client (<client>:<port>)
 		"""
 		self.port_number += 1
-		port_name = 'looper_%02d' % self.port_number
+		port_name = LOOPER_PORT_FORMAT % self.port_number
 		with Pause(self):
 			self.out_ports[self.port_number] = self.client.midi_outports.register(port_name)
-		return self.port_number, port_name
+		return self.port_number, '%s:%s' % (self.client.name, port_name)
 
 	def delete_port(self, port_number):
 		"""
@@ -86,9 +88,7 @@ class MultiPortLooper(Looper):
 
 	def _play_process_callback(self, frames):
 		if self.any_loop_active():
-			self.bashed_port.clear_buffer()
-			for port in self.out_ports.values():
-				port.clear_buffer()
+			self._clear_buffers()
 			last_beat = self.beat + self.beats_per_process
 			while True:
 				events_this_block = np.hstack([loop.events_between(self.beat, last_beat) \
@@ -96,10 +96,12 @@ class MultiPortLooper(Looper):
 				if len(events_this_block):
 					for evt in np.sort(events_this_block, kind="heapsort", order="beat"):
 						offset = int((evt['beat'] - self.beat) * self.samples_per_beat)
-						self.bashed_port.write_midi_event(offset, evt['msg'])
-						port_number = self.pitch_maps[evt['msg'][1]]
-						if not port_number is None:
-							self.out_ports[port_number].write_midi_event(offset, evt['msg'])
+						if self.bashed_exclusive:
+							self.bashed_port.write_midi_event(offset, evt['msg'])
+						else:
+							port_number = self.pitch_maps[evt['msg'][1]]
+							if not port_number is None:
+								self.out_ports[port_number].write_midi_event(offset, evt['msg'])
 				if last_beat < self.beats_length:
 					self.beat = last_beat
 					break
@@ -110,8 +112,9 @@ class MultiPortLooper(Looper):
 		"""
 		Sends MIDI message "All Notes Off" (0x7B) to all channels from 0 - 15,
 		and then transitions to "_null_process_callback".
-		Overrides Looper._stop_process_callback to send note off to EVERY port
+		Overrides Looper._stop_process_callback to send note off to every port.
 		"""
+		self._clear_buffers()
 		msg = bytearray.fromhex('B07B')
 		for channel in range(16):
 			self.bashed_port.write_midi_event(0, msg)
@@ -121,6 +124,11 @@ class MultiPortLooper(Looper):
 			msg[0] += 1
 		self.beat = 0.0
 		self._real_process_callback = self._null_process_callback
+
+	def _clear_buffers(self):
+		self.bashed_port.clear_buffer()
+		for port in self.out_ports.values():
+			port.clear_buffer()
 
 	def stop(self):
 		super().stop()

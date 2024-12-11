@@ -113,7 +113,7 @@ class DrumKitWidget(QFrame):
 	def synth_ready(self):
 		"""
 		Received from Synth when ready to play.
-		Notifies MainWindow so the MultiPortLooper can connect a new port to this
+		Notifies MainWindow so the KitbashLooper can connect a new port to this
 		widget's synth.
 		"""
 		self.sig_synth_ready.emit(self)
@@ -139,21 +139,37 @@ class DrumKitWidget(QFrame):
 
 	@pyqtSlot(QFrame)
 	def group_clicked(self, group_frame):
+		"""
+		Tied to a GroupButton click event.
+		"group_frame" is the QFrame which contains the clicked GroupButton and various
+		InstrumentButton instances.
+		"""
 		group_button = group_frame.findChild(GroupButton)
 		for inst_button in group_frame.findChildren(InstrumentButton):
 			inst_button.setChecked(group_button.isChecked())
 
 	@pyqtSlot(str, QPushButton)
 	def instrument_toggled(self, inst_id, button):
+		"""
+		Tied to an InstrumentButton toggle event.
+		"inst_id" is a string key, enumerated in the DrumkitClass.
+		"button" is the InstrumentButton which was toggled.
+		"""
 		self.sig_inst_toggle.emit(self, inst_id, button.isChecked(), self.ctrl_pressed())
 		self.update_count()
 
 	@pyqtSlot()
 	def remove_clicked(self):
+		"""
+		Tied to the "remove" button click.
+		"""
 		self.sig_remove_drumkit.emit(self)
 
 	@pyqtSlot(bool)
 	def hide(self, state):
+		"""
+		"Roll up" this DrumkitWidget.
+		"""
 		if state:
 			self.initial_height = self.height()
 			self.frm_groups.hide()
@@ -165,6 +181,9 @@ class DrumKitWidget(QFrame):
 			self.hide_button.setIcon(ICON_EXPANDED())
 
 	def update_count(self):
+		"""
+		Updates the "use count" label with the number of selected instruments.
+		"""
 		use_count = len([ b for b in self.frm_groups.findChildren(InstrumentButton) if b.isChecked() ])
 		self.lbl_use_count.setText('(%d)' % use_count)
 		font = self.lbl_use_count.font()
@@ -172,6 +191,10 @@ class DrumKitWidget(QFrame):
 		self.lbl_use_count.setFont(font)
 
 	def ctrl_pressed(self):
+		"""
+		Returns (bool) True if the CTRL key is being pressed. Useful for making
+		multiple selections.
+		"""
 		return QApplication.keyboardModifiers() == Qt.ControlModifier
 
 	def deselect_parent_group(self, inst_id):
