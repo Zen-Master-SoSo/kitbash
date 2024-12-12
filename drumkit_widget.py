@@ -2,7 +2,8 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
-import os, logging
+import logging
+from os.path import basename
 from functools import partial
 
 from PyQt5.QtCore import Qt
@@ -42,7 +43,7 @@ class DrumKitWidget(QFrame):
 	def __init__(self, filename, parent):
 		super().__init__(parent)
 		self.filename = filename
-		self.moniker = os.path.basename(self.filename)
+		self.moniker = basename(self.filename)
 		if parent.options.no_audio:
 			self.synth = None
 		else:

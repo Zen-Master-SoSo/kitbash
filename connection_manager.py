@@ -86,7 +86,6 @@ class JackConnectionManager(QObject):
 	sig_port_registration = pyqtSignal(JackPort, int)
 	sig_port_connect = pyqtSignal(JackPort, JackPort, bool)
 	sig_port_rename = pyqtSignal(JackPort, str, str)
-	sig_xrun = pyqtSignal()
 	sig_shutdown = pyqtSignal()
 
 	instance = None
@@ -105,7 +104,6 @@ class JackConnectionManager(QObject):
 			super().__init__()
 			self.connected = True
 			self.client_name = 'conn-man'
-			logging.debug('Connecting')
 			status = jacklib.jack_status_t()
 			self.client = jacklib.client_open(self.client_name, jacklib.JackNoStartServer, status)
 			if status.value:
@@ -117,6 +115,7 @@ class JackConnectionManager(QObject):
 				raise RuntimeError("Could not get JACK client name.")
 			self.client_name = name.decode()
 			self.queue = Queue()
+			self.xruns = 0
 			jacklib.on_shutdown(self.client, self.shutdown_callback, None)
 			logging.debug("Client connected, name: %s UUID: %s",
 				self.client_name, jacklib.client_get_uuid(self.client))
@@ -156,7 +155,7 @@ class JackConnectionManager(QObject):
 		)
 
 	def xrun_callback(self, arg):
-		self.sig_xrun.emit()
+		self.xruns += 1
 		return 0
 
 	def shutdown_callback(self, *args):

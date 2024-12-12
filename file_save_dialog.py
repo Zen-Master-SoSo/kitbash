@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import QGroupBox
 from PyQt5.QtWidgets import QRadioButton
 from PyQt5.QtGui import QKeySequence
 from kitbash import (
+	SAMPLES_ABSPATH,
 	SAMPLES_RESOLVE,
 	SAMPLES_COPY,
 	SAMPLES_SYMLINK,
@@ -37,10 +38,12 @@ class FileSaveDialog(QFileDialog):
 		lbl = QLabel()
 		self.layout().addWidget(lbl)
 		gb = QGroupBox('Sample location')
-		self.r_resolve = QRadioButton('Point to the original samples')
+		self.r_abspath = QRadioButton('Point to the original samples - absolute path')
+		self.r_resolve = QRadioButton('Point to the original samples - relative')
 		self.r_copy = QRadioButton('Copy to a new "./samples" folder')
 		self.r_symlink = QRadioButton('Create symlinks in a new "./samples" folder')
 		self.r_hardlink = QRadioButton('Hardlink the originals in a new "./samples" folder')
+		self.r_abspath.clicked.connect(partial(self.slot_set_mode, SAMPLES_ABSPATH))
 		self.r_resolve.clicked.connect(partial(self.slot_set_mode, SAMPLES_RESOLVE))
 		self.r_copy.clicked.connect(partial(self.slot_set_mode, SAMPLES_COPY))
 		self.r_symlink.clicked.connect(partial(self.slot_set_mode, SAMPLES_SYMLINK))
@@ -48,6 +51,7 @@ class FileSaveDialog(QFileDialog):
 		lo = QVBoxLayout()
 		lo.setContentsMargins(2,2,2,2)
 		lo.setSpacing(2)
+		lo.addWidget(self.r_abspath)
 		lo.addWidget(self.r_resolve)
 		lo.addWidget(self.r_copy)
 		lo.addWidget(self.r_symlink)
@@ -94,8 +98,10 @@ class TestWindow(QMainWindow):
 			selected_files = file_dialog.selectedFiles()
 			if selected_files:
 				self.label.setText(f"Selected files: {', '.join(selected_files)}")
-				if file_dialog.samples_mode == SAMPLES_RESOLVE:
-					self.mode_label.setText('Point to the originals')
+				if file_dialog.samples_mode == SAMPLES_ABSPATH:
+					self.mode_label.setText('Point to the originals (absolute)')
+				elif file_dialog.samples_mode == SAMPLES_RESOLVE:
+					self.mode_label.setText('Point to the originals (relative)')
 				elif file_dialog.samples_mode == SAMPLES_COPY:
 					self.mode_label.setText('Copy the originals')
 				elif file_dialog.samples_mode == SAMPLES_SYMLINK:

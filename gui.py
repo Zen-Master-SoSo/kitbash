@@ -127,7 +127,6 @@ class MainWindow(QMainWindow):
 			self.conn_man.sig_port_registration.connect(self.slot_jack_port_registration)
 			self.conn_man.sig_port_connect.connect(self.slot_jack_port_connect)
 			self.conn_man.sig_port_rename.connect(self.slot_jack_port_rename)
-			self.conn_man.sig_xrun.connect(self.slot_jack_xrun)
 			self.conn_man.sig_shutdown.connect(self.slot_jack_shutdown)
 			# Select audio playback client:
 			playback_clients = self.conn_man.playback_clients()
@@ -380,7 +379,7 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(QObject, str, bool, bool)
 	def slot_inst_toggle(self, source_widget, inst_id, state, ctrl_state):
-		b_preview.setChecked(False)
+		self.b_preview.setChecked(False)
 		if state and not ctrl_state:
 			for drumkit_widget in self.drumkit_widgets:
 				if not drumkit_widget is source_widget:
@@ -392,7 +391,7 @@ class MainWindow(QMainWindow):
 				MIDI_DRUM_PITCHES[inst_id],
 				source_widget.port_number if state else None)
 		self.set_dirty()
-		b_preview.setEnabled(any(self.looper.pitch_maps.values())
+		self.b_preview.setEnabled(any(self.looper.pitch_maps.values()))
 
 	def compile_bashed_sfz(self, filename = None, samples_mode = SAMPLES_SYMLINK):
 		for drumkit_widget in self.drumkit_widgets:
@@ -419,7 +418,6 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(JackPort, int)
 	def slot_jack_port_registration(self, port, action):
-		logging.info('%s %s', port, 'registered' if action else 'gone')
 		if action and 'liquidsfz' in port.name:
 			Synth.port_registered(port)
 

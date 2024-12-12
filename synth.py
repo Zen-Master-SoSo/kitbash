@@ -49,7 +49,6 @@ class Synth(QObject):
 		can be instantiated.
 		"""
 		synth = cls.queue[0]
-		logging.debug('Synth %s port_registered: %s', synth.moniker, port)
 		if port.is_input and port.is_midi:
 			synth.midi_in_port = port
 		elif port.is_output and port.is_audio:

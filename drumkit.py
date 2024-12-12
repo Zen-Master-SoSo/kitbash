@@ -8,9 +8,15 @@ Provides percussion group / instrument oriented wrapper for SFZ classes.
 Notes:
 When importing
 """
-from os.path import basename
+from shutil import copy2 as copy
+from re import split
+from os import path
+from os import mkdir
+from os import symlink
+from os import link
 from copy import deepcopy
 from functools import reduce
+from functools import cached_property
 from operator import and_, or_
 from midi_notes import Note, MIDI_DRUM_PITCHES, MIDI_DRUM_NAMES, MIDI_DRUM_IDS
 from sfzen import COMMENT_DIVIDER
@@ -18,24 +24,60 @@ from sfzen import SFZ
 from sfzen.sfz_elems import Region as SFZRegion
 from sfzen.sfz_elems import Opcode as SFZOpcode
 from kitbash import (
+	SAMPLES_ABSPATH,
 	SAMPLES_RESOLVE,
 	SAMPLES_COPY,
 	SAMPLES_SYMLINK,
 	SAMPLES_HARDLINK
 )
 
+
+RE_PATH_DIVIDER = '[\\\/]'
+
 class SampleOpcode(SFZOpcode):
 
 	def __init__(self, source_opcode, source_filename):
 		self.source_filename = source_filename
 		self._parsed_value = source_opcode._parsed_value
-		self.value = source_opcode._parsed_value
+		self.value = self._parsed_value
 
-	def resolve_path(self, target_filename = None):
-		p = Path(self._parsed_value)
+	@cached_property
+	def path_parts(self):
+		return split(RE_PATH_DIVIDER, self._parsed_value)
+
+	@cached_property
+	def abspath(self):
+		return path.join(path.dirname(self.source_filename), *self.path_parts)
+
+	@cached_property
+	def basename(self):
+		return self.path_parts[-1]
+
+	def set_abspath(self):
+		self.value = self.abspath
+
+	def resolve_to(self, target_dir):
+		self.value = path.relpath(self.abspath, path.join(target_dir, self.basename))
+
+	def copy_to(self, target_dir):
+		copy(self.abspath, self._fix_to_samples_dir(target_dir))
+
+	def symlink_to(self, target_dir):
+		symlink(self.abspath, self._fix_to_samples_dir(target_dir))
+
+	def hardlink_to(self, target_dir):
+		link(self.abspath, self._fix_to_samples_dir(target_dir))
+
+	def _fix_to_samples_dir(self, target_dir):
+		"""
+		Sets the "value" of this opcode to "samples/<basename>"
+		Returns the absolute path of the target sample relative to the sfz file to create.
+		"""
+		self.value = path.join('samples', self.basename)
+		return path.join(target_dir, self.basename)
 
 	def __str__(self):
-		return 'SAMPLE=%s' % (self.value)
+		return 'sample=%s' % (self.value)
 
 
 class Region(SFZRegion):
@@ -57,7 +99,7 @@ class Region(SFZRegion):
 
 	def __repr__(self):
 		return 'Region: %s, line %d (%d opcodes)' % (
-			basename(self.filename),
+			path.basename(self.filename),
 			self.line,
 			len(self._opcodes)
 		)
@@ -341,7 +383,7 @@ class Drumkit:
 		if self.filename is None:
 			self.name = '[unnamed drumkit]'
 		else:
-			self.name = basename(filename)
+			self.name = path.basename(filename)
 			sfz = SFZ(self.filename)
 			for pitch, group_id in Drumkit.pitch_groups.items():
 				regions = list(sfz.regions_for(lokey=pitch, hikey=pitch))
@@ -350,16 +392,48 @@ class Drumkit:
 						self.groups[group_id] = PercussionGroup(group_id)
 					self.groups[group_id].append_instrument(pitch, regions, filename)
 
-	def write(self, stream, samples_mode):
+	def save_as(self, filename, samples_mode = SAMPLES_ABSPATH):
 		"""
-		Write in SFZ format to any file-like object, including sys.stdout.
-
+		Save in SFZ format to the given filename.
 		"samples_mode" is a kibash constant which defines how to render "sample"
 		opcodes. May be one of:
-			SAMPLES_RESOLVE
-			SAMPLES_COPY
-			SAMPLES_SYMLINK
-			SAMPLES_HARDLINK
+			SAMPLES_ABSPATH		SAMPLES_RESOLVE		SAMPLES_COPY
+			SAMPLES_SYMLINK		SAMPLES_HARDLINK
+		"""
+		filename = path.abspath(filename)
+		target_dir = path.dirname(filename)
+		try:
+			mkdir(target_dir)
+		except FileExistsError:
+			pass
+		if samples_mode == SAMPLES_ABSPATH:
+			for sample in self.samples():
+				sample.set_abspath()
+		elif samples_mode == SAMPLES_RESOLVE:
+			for sample in self.samples():
+				sample.resolve_to(target_dir)
+		else:
+			target_sample_dir = path.join(target_dir, 'samples')
+			try:
+				mkdir(target_sample_dir)
+			except FileExistsError:
+				pass
+			for sample in self.samples():
+				try:
+					if samples_mode == SAMPLES_COPY:
+						sample.copy_to(target_sample_dir)
+					elif samples_mode == SAMPLES_SYMLINK:
+						sample.symlink_to(target_sample_dir)
+					elif samples_mode == SAMPLES_HARDLINK:
+						sample.hardlink_to(target_sample_dir)
+				except FileExistsError:
+					pass
+		with open(filename, 'w') as fob:
+			self.write(fob)
+
+	def write(self, stream):
+		"""
+		Write in SFZ format to any file-like object, including sys.stdout.
 		"""
 		stream.write(f'{COMMENT_DIVIDER}// {self.name}\n{COMMENT_DIVIDER}\n')
 		global_opcodes = self.common_opstrings()
@@ -476,7 +550,7 @@ class Drumkit:
 		return self.groups[group_id]
 
 	def __str__(self):
-		return f"<Drumkit {self.filename}>"
+		return f"<Drumkit {self.path}>"
 
 
 #  end kitbash/drumkit.py
