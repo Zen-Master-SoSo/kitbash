@@ -8,21 +8,15 @@ Provides percussion group / instrument oriented wrapper for SFZ classes.
 Notes:
 When importing
 """
-from shutil import copy2 as copy
-from re import split
 from os import path
 from os import mkdir
-from os import symlink
-from os import link
 from copy import deepcopy
 from functools import reduce
-from functools import cached_property
 from operator import and_, or_
 from midi_notes import Note, MIDI_DRUM_PITCHES, MIDI_DRUM_NAMES, MIDI_DRUM_IDS
 from sfzen import COMMENT_DIVIDER
 from sfzen import SFZ
 from sfzen.sfz_elems import Region as SFZRegion
-from sfzen.sfz_elems import Opcode as SFZOpcode
 from kitbash import (
 	SAMPLES_ABSPATH,
 	SAMPLES_RESOLVE,
@@ -30,54 +24,6 @@ from kitbash import (
 	SAMPLES_SYMLINK,
 	SAMPLES_HARDLINK
 )
-
-
-RE_PATH_DIVIDER = '[\\\/]'
-
-class SampleOpcode(SFZOpcode):
-
-	def __init__(self, source_opcode, source_filename):
-		self.source_filename = source_filename
-		self._parsed_value = source_opcode._parsed_value
-		self.value = self._parsed_value
-
-	@cached_property
-	def path_parts(self):
-		return split(RE_PATH_DIVIDER, self._parsed_value)
-
-	@cached_property
-	def abspath(self):
-		return path.join(path.dirname(self.source_filename), *self.path_parts)
-
-	@cached_property
-	def basename(self):
-		return self.path_parts[-1]
-
-	def set_abspath(self):
-		self.value = self.abspath
-
-	def resolve_to(self, target_dir):
-		self.value = path.relpath(self.abspath, path.join(target_dir, self.basename))
-
-	def copy_to(self, target_dir):
-		copy(self.abspath, self._fix_to_samples_dir(target_dir))
-
-	def symlink_to(self, target_dir):
-		symlink(self.abspath, self._fix_to_samples_dir(target_dir))
-
-	def hardlink_to(self, target_dir):
-		link(self.abspath, self._fix_to_samples_dir(target_dir))
-
-	def _fix_to_samples_dir(self, target_dir):
-		"""
-		Sets the "value" of this opcode to "samples/<basename>"
-		Returns the absolute path of the target sample relative to the sfz file to create.
-		"""
-		self.value = path.join('samples', self.basename)
-		return path.join(target_dir, self.basename)
-
-	def __str__(self):
-		return 'sample=%s' % (self.value)
 
 
 class Region(SFZRegion):
@@ -89,8 +35,6 @@ class Region(SFZRegion):
 	def __init__(self, source_region, source_filename):
 		self.subheaders = []
 		self._opcodes = source_region.inherited_opcodes()
-		if 'sample' in self.opcodes:
-			self.opcodes['sample'] = SampleOpcode(self.opcodes['sample'], source_filename)
 		self.filename = source_filename
 		self.line = source_region.line
 		self.column = source_region.column
@@ -263,14 +207,16 @@ class PercussionGroup:
 		Returns a set of all the string representation (including name and value) of
 		all the opcodes used by all Instruments in this Group.
 		"""
-		return reduce(or_, [instrument.opstrings_used() for instrument in self.instruments.values()], set())
+		return reduce(or_, [instrument.opstrings_used() \
+			for instrument in self.instruments.values()], set())
 
 	def common_opstrings(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the identical opcodes used in every region in this Group.
 		"""
-		return reduce(and_, [instrument.opstrings_used() for instrument in self.instruments.values()], set())
+		return reduce(and_, [instrument.opstrings_used() \
+			for instrument in self.instruments.values()], set())
 
 	def regions_using_opstring(self, opstr):
 		"""
@@ -285,7 +231,8 @@ class PercussionGroup:
 		Returns a set of all raw values of all "sample" opcodes contained in the
 		regions defined for this Instrument.
 		"""
-		return reduce(or_, [ instrument.samples_used() for instrument in self.instruments.values() ], set())
+		return reduce(or_, [ instrument.samples_used() \
+			for instrument in self.instruments.values() ], set())
 
 	def samples(self):
 		"""
@@ -408,7 +355,7 @@ class Drumkit:
 			pass
 		if samples_mode == SAMPLES_ABSPATH:
 			for sample in self.samples():
-				sample.set_abspath()
+				sample.use_abspath()
 		elif samples_mode == SAMPLES_RESOLVE:
 			for sample in self.samples():
 				sample.resolve_to(target_dir)
@@ -435,7 +382,7 @@ class Drumkit:
 		"""
 		Write in SFZ format to any file-like object, including sys.stdout.
 		"""
-		stream.write(f'{COMMENT_DIVIDER}// {self.name}\n{COMMENT_DIVIDER}\n')
+		stream.write(f'//\n// {self.name}\n//\n')
 		global_opcodes = self.common_opstrings()
 		if global_opcodes:
 			stream.write('<global>\n')
@@ -513,7 +460,8 @@ class Drumkit:
 		"""
 		Returns a set of all raw values of all "sample" opcodes used in this Drumkit.
 		"""
-		return reduce(or_, [group.samples_used() for group in self.groups.values()], set())
+		return reduce(or_, [group.samples_used() \
+			for group in self.groups.values()], set())
 
 	def instrument_ids(self, arg):
 		"""
@@ -550,7 +498,7 @@ class Drumkit:
 		return self.groups[group_id]
 
 	def __str__(self):
-		return f"<Drumkit {self.path}>"
+		return f"<Drumkit {self.name}>"
 
 
 #  end kitbash/drumkit.py
