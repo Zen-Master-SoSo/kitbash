@@ -34,7 +34,7 @@ from kitbash.icons import (
 )
 
 
-class DrumKitWidget(QFrame):
+class DrumkitWidget(QFrame):
 
 	sig_inst_toggle = pyqtSignal(QObject, str, bool, bool)
 	sig_synth_ready = pyqtSignal(QObject)
@@ -48,7 +48,7 @@ class DrumKitWidget(QFrame):
 			self.synth = None
 		else:
 			self.synth = Synth(self.moniker)
-			self.synth.sig_ready.connect(self.synth_ready)
+			self.synth.sig_ports_ready.connect(self.slot_synth_ports_ready)
 			self.synth.load(self.filename)
 
 		self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
@@ -111,9 +111,9 @@ class DrumKitWidget(QFrame):
 		self.setLayout(main_layout)
 
 	@pyqtSlot()
-	def synth_ready(self):
+	def slot_synth_ports_ready(self):
 		"""
-		Received from Synth when ready to play.
+		Received from Synth when all ports are registered.
 		Notifies MainWindow so the KitbashLooper can connect a new port to this
 		widget's synth.
 		"""
@@ -126,14 +126,13 @@ class DrumKitWidget(QFrame):
 		"""
 		for group in self.drumkit.groups.values():
 			if group.empty():
-				logging.warning('Empty percussing group: %s', group.group_id)
 				continue
 			group_frame = GroupFrame(group, self)
 			group_frame.group_id = group.group_id
 			group_frame.group_button.clicked.connect(partial(self.group_clicked, group_frame))
 			for inst in group.instruments.values():
 				inst_button = InstrumentButton(inst, group_frame)
-				inst_button.toggled.connect(partial(self.instrument_toggled, inst.inst_id, inst_button))
+				inst_button.toggled.connect(partial(self.instrument_toggled, inst_button))
 				group_frame.group_layout.addWidget(inst_button)
 			group_frame.group_layout.addStretch()
 			self.groups.addWidget(group_frame)
@@ -144,19 +143,20 @@ class DrumKitWidget(QFrame):
 		Tied to a GroupButton click event.
 		"group_frame" is the QFrame which contains the clicked GroupButton and various
 		InstrumentButton instances.
+		InstrumentButton signals are not suppressed, and so trigger "sig_inst_toggle".
 		"""
 		group_button = group_frame.findChild(GroupButton)
 		for inst_button in group_frame.findChildren(InstrumentButton):
 			inst_button.setChecked(group_button.isChecked())
 
-	@pyqtSlot(str, QPushButton)
-	def instrument_toggled(self, inst_id, button):
+	@pyqtSlot(QPushButton)
+	def instrument_toggled(self, button):
 		"""
 		Tied to an InstrumentButton toggle event.
 		"inst_id" is a string key, enumerated in the DrumkitClass.
 		"button" is the InstrumentButton which was toggled.
 		"""
-		self.sig_inst_toggle.emit(self, inst_id, button.isChecked(), self.ctrl_pressed())
+		self.sig_inst_toggle.emit(self, button.inst_id, button.isChecked(), self.ctrl_pressed())
 		self.update_count()
 
 	@pyqtSlot()
@@ -199,10 +199,17 @@ class DrumKitWidget(QFrame):
 		return QApplication.keyboardModifiers() == Qt.ControlModifier
 
 	def deselect_parent_group(self, inst_id):
+		"""
+		Called whenever an InstrumentButton is deselected.
+		"""
 		inst_button = self.findChild(InstrumentButton, inst_id)
 		inst_button.parentWidget().findChild(GroupButton).setChecked(False)
 
 	def deselect_instrument(self, inst_id):
+		"""
+		Called from MainWindow when a button with the same inst_id is selected
+		exclusively (not CTRL key pressed).
+		"""
 		button = self.findChild(InstrumentButton, inst_id)
 		if button:	# May not exist, as not all Drumkits use the same instruments
 			button.setChecked(False)
@@ -216,6 +223,14 @@ class DrumKitWidget(QFrame):
 		return [ button.inst_id \
 				for button in self.findChildren(InstrumentButton) \
 				if button.isChecked() ]
+
+	def select_all(self):
+		for type_ in [GroupButton, InstrumentButton]:
+			buttons = self.findChildren(type_)
+			with SigBlock(* buttons):
+				for button in buttons:
+					button.setChecked(True)
+		self.update_count()
 
 	def saved_selections(self):
 		"""
@@ -251,7 +266,7 @@ class DrumKitWidget(QFrame):
 				logging.warning('Group "%s" not found in project def', group_frame.group_id)
 
 	def __str__(self):
-		return f"<DrumKitWidget {self.moniker}>"
+		return f"<DrumkitWidget {self.moniker}>"
 
 
 class TitleFrame(QFrame):

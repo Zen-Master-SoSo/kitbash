@@ -8,6 +8,7 @@ Provides percussion group / instrument oriented wrapper for SFZ classes.
 Notes:
 When importing
 """
+import logging
 from os import path
 from os import mkdir
 from copy import deepcopy
@@ -334,7 +335,7 @@ class Drumkit:
 	}
 
 	def __init__(self, filename=None):
-		self.groups = { }
+		self.groups = { group_id:PercussionGroup(group_id) for group_id in self.group_pitches.keys() }
 		self.filename = filename
 		if self.filename is None:
 			self.name = '[unnamed drumkit]'
@@ -344,8 +345,6 @@ class Drumkit:
 			for pitch, group_id in Drumkit.pitch_groups.items():
 				regions = list(sfz.regions_for(lokey=pitch, hikey=pitch))
 				if regions:
-					if group_id not in self.groups:
-						self.groups[group_id] = PercussionGroup(group_id)
 					self.groups[group_id].append_instrument(pitch, regions, filename)
 
 	def save_as(self, filename, samples_mode = SAMPLES_ABSPATH):
@@ -410,20 +409,28 @@ class Drumkit:
 
 		Raises IndexError if the specified group was not found in the source kit.
 		"""
-		if not group_id in source_kit.groups:
-			raise IndexError(f'Group "{group_id}" not in source kit "{source_kit}"')
 		self.groups[group_id] = deepcopy(source_kit.groups[group_id])
 
-	def import_instrument(self, pitch, source_kit):
+	def import_instrument(self, arg, source_kit):
 		"""
 		Do a deep copy from the given Drumkit, of the instrument tied to the spectfied
 		pitch.
 		pitch:		(int)		MIDI note number of the instrument to copy.
 		source_kit	(Drumkit)	Source to copy from
 		"""
-		pitch, _ = self.instrument_ids(pitch)
+		logging.debug('Importing instrument %s', arg)
+		pitch, _ = self.instrument_selection_criteria(arg)
 		self.groups[self.pitch_groups[pitch]].instruments[pitch] = \
 			deepcopy(source_kit.instrument(pitch))
+
+	def delete_instrument(self, arg):
+		"""
+		Removes an instrument - quicker than reimporting everything when changes are made.
+		"""
+		logging.debug('Deleting instrument %s', arg)
+		pitch, _ = self.instrument_selection_criteria(arg)
+		group_id = self.pitch_groups[pitch]
+		del self.groups[group_id].instruments[pitch]
 
 	def opstrings_used(self):
 		"""
@@ -472,7 +479,27 @@ class Drumkit:
 		return reduce(or_, [group.samples_used() \
 			for group in self.groups.values()], set())
 
-	def instrument_ids(self, arg):
+	def instruments(self):
+		"""
+		Generator function which yields every instrument.
+		"""
+		for group in self.groups.values():
+			for instrument in group.instruments.values():
+				yield instrument
+
+	def instrument_ids(self):
+		"""
+		Returns a list of (str) inst_id
+		"""
+		return [ instrument.inst_id for instrument in self.instruments() ]
+
+	def instrument_pitches(self):
+		"""
+		Returns a list of (int) pitch
+		"""
+		return [ instrument.pitch for instrument in self.instruments() ]
+
+	def instrument_selection_criteria(self, arg):
 		"""
 		Returns tuple:
 			(int) pitch
@@ -483,7 +510,7 @@ class Drumkit:
 			return arg, MIDI_DRUM_IDS[arg]
 		if arg in MIDI_DRUM_PITCHES:
 			return MIDI_DRUM_PITCHES[arg], arg
-		raise ValueError()
+		raise ValueError(f'"{arg}" not recognized as an instrument id or pitch' )
 
 	def instrument(self, arg):
 		"""
@@ -492,12 +519,8 @@ class Drumkit:
 
 		Raises IndexError if the instrument is not found in this Drumkit.
 		"""
-		pitch, _ = self.instrument_ids(arg)
+		pitch, _ = self.instrument_selection_criteria(arg)
 		group_id = self.pitch_groups[pitch]
-		if group_id not in self.groups:
-			raise IndexError(f'Group "{group_id}" not in "{self}"')
-		if pitch not in self.groups[group_id].instruments:
-			raise IndexError(f'"{arg}" not in "{self}"')
 		return self.groups[group_id].instruments[pitch]
 
 	def group(self, group_id):

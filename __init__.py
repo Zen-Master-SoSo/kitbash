@@ -23,12 +23,13 @@ def loops_database():
 	try:
 		return loops_database.instance
 	except AttributeError:
-		dbpath = os.path.join(user_config_dir(), 'ZenSoSo', 'midibanks.db')
-		try:
-			os.mkdir(dbpath)
-		except FileExistsError:
-			pass
-		loops_database.instance = LoopsDB(dbpath)
+		pass
+	db_dir = os.path.join(user_config_dir(), 'ZenSoSo')
+	try:
+		os.mkdir(db_dir)
+	except FileExistsError:
+		pass
+	loops_database.instance = LoopsDB(os.path.join(db_dir, 'kitbash-midiloops.db'))
 	return loops_database.instance
 
 #  end kitbash/__init__.py

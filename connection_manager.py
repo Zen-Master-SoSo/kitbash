@@ -117,8 +117,7 @@ class JackConnectionManager(QObject):
 			self.queue = Queue()
 			self.xruns = 0
 			jacklib.on_shutdown(self.client, self.shutdown_callback, None)
-			logging.debug("Client connected, name: %s UUID: %s",
-				self.client_name, jacklib.client_get_uuid(self.client))
+			logging.debug('ConnectionManager client "%s" created', self.client_name)
 			jacklib.set_error_function(self.error_callback)
 			jacklib.set_port_registration_callback(self.client, self.port_registration_callback, None)
 			jacklib.set_port_connect_callback(self.client, self.port_connect_callback, None)

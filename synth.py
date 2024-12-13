@@ -20,7 +20,7 @@ class Synth(QObject):
 	callbacks are always associated with the correct synth.
 	"""
 
-	sig_ready = pyqtSignal()
+	sig_ports_ready = pyqtSignal()
 	queue = deque()
 
 	def __init__(self, moniker):
@@ -29,6 +29,7 @@ class Synth(QObject):
 		"""
 		Synth.queue.append(self)
 		self.moniker = moniker
+		self.connected = False
 		self.midi_in_port = None
 		self.audio_outs = []
 		self._liquid = None
@@ -58,7 +59,7 @@ class Synth(QObject):
 		if len(synth.audio_outs) == 2 and not synth.midi_in_port is None:
 			logging.debug('Synth %s ports complete - popping Synth.queue', synth.moniker)
 			cls.queue.popleft()
-			synth.sig_ready.emit()
+			synth.sig_ports_ready.emit()
 
 	def quit(self):
 		"""

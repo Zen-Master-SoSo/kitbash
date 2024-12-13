@@ -39,41 +39,41 @@ QScrollBar:sub-line {
 }
 
 
-DrumKitWidget QLabel {
+DrumkitWidget QLabel {
 	color: #666;
 	font-size: 10pt;
 	margin-left: 8px;
 }
 
-DrumKitWidget QPushButton:disabled {
+DrumkitWidget QPushButton:disabled {
 	color: #888;
 }
 
-DrumKitWidget QPushButton:checked {
+DrumkitWidget QPushButton:checked {
 	background-color: #E6E6FA;
 }
 
-DrumKitWidget TitleFrame {
+DrumkitWidget TitleFrame {
 	background-color: #F7F7FF;
 }
 
-DrumKitWidget TitleFrame QLabel {
+DrumkitWidget TitleFrame QLabel {
 }
 
-DrumKitWidget GroupFrame {
+DrumkitWidget GroupFrame {
 	background-color: #D7D9D8;
 }
 
-DrumKitWidget QPushButton {
+DrumkitWidget QPushButton {
 	font-family: 'Ubuntu', 'Liberation Sans', 'Bitstream Vera Sans', sans-serif;
 }
 
-DrumKitWidget GroupButton {
+DrumkitWidget GroupButton {
 	font-weight: bold;
 	font-size: 10pt;
 }
 
-DrumKitWidget InstrumentButton {
+DrumkitWidget InstrumentButton {
 	font-size: 8pt;
 }
 
