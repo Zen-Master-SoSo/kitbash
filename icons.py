@@ -2,6 +2,11 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
+"""
+Icon store.
+Defers loading of QPixmaps until a QGuiApplication is instantiated.
+This is a Qt5 requirement.
+"""
 import os
 from functools import lru_cache
 from PyQt5.QtGui import QIcon

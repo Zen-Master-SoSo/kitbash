@@ -79,17 +79,16 @@ from kitbash.connection_manager import (
 class MainWindow(QMainWindow):
 
 	instance = None
-	options = None
+	settings = None
 
-	def __new__(cls, options):
+	def __new__(cls):
 		if cls.instance is None:
 			cls.instance = super().__new__(cls)
 		return cls.instance
 
-	def __init__(self, options):
-		if not self.options is None:
+	def __init__(self):
+		if not self.settings is None:
 			return
-		self.options = options
 		super().__init__()
 		with ShutUpQT():
 			uic.loadUi(os.path.join(PACKAGE_DIR, 'res', 'main_window.ui'), self)
@@ -123,47 +122,37 @@ class MainWindow(QMainWindow):
 		self.drumkit_widgets.setSpacing(2)
 		self.kits_area.setLayout(self.drumkit_widgets)
 
-		if self.options.no_audio:
-			self.conn_man = None
-			self.looper = None
-			self.synth = None
-			self.frm_looper.hide()
-			self.lbl_audio_indicator.hide()
-
+		# Setup JackConnectionManager
+		self.conn_man = JackConnectionManager()
+		self.conn_man.sig_error.connect(self.slot_jack_error)
+		self.conn_man.sig_port_registration.connect(self.slot_jack_port_registration)
+		#self.conn_man.sig_port_connect.connect(self.slot_jack_port_connect)
+		self.conn_man.sig_port_rename.connect(self.slot_jack_port_rename)
+		self.conn_man.sig_shutdown.connect(self.slot_jack_shutdown)
+		# Select audio playback client:
+		playback_clients = self.conn_man.playback_clients()
+		if playback_clients:
+			client_name = playback_clients[0]
+			self.lbl_audio_client.setText(client_name)
 		else:
-			# Setup JackConnectionManager
-			self.conn_man = JackConnectionManager()
-			self.conn_man.sig_error.connect(self.slot_jack_error)
-			self.conn_man.sig_port_registration.connect(self.slot_jack_port_registration)
-			self.conn_man.sig_port_connect.connect(self.slot_jack_port_connect)
-			self.conn_man.sig_port_rename.connect(self.slot_jack_port_rename)
-			self.conn_man.sig_shutdown.connect(self.slot_jack_shutdown)
-			# Select audio playback client:
-			playback_clients = self.conn_man.playback_clients()
-			if playback_clients:
-				client_name = playback_clients[0]
-				self.lbl_audio_client.setText(client_name)
-			else:
-				logging.warning('No physical playback client found')
-			# Setup looper
-			self.looper = KitbashLooper()
-			self.looper_widget = LooperWidget(self, loops_database(), self.looper)
-			self.looper_widget.looper.loop_exclusive = True
-			self.looper_widget.columns = 8
-			self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-			self.looper.signals.sig_state_changed.connect(self.looper_widget.play_button.setChecked)
-			self.looper_port_widgets = {}	# dict of DrumkitWidget, indexed on Jack.OwnMidiPort.name
-			# Setup synth - see slot_jack_port_registration
-			self.bashed_kit = Drumkit()
-			self.synth = Synth('MainWindow')
-			self.synth.sig_ports_ready.connect(self.slot_synth_ports_ready)
-			self.temp_sfz_filename = None
-			self.update_temp_sfz()
-			# Modify UI
-			self.frm_looper.layout().addWidget(self.looper_widget)
-			self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
-
-		QTimer.singleShot(0, self.layout_complete)
+			logging.warning('No physical playback client found')
+		# Setup looper
+		self.looper = KitbashLooper()
+		self.looper_widget = LooperWidget(self, loops_database(), self.looper)
+		self.looper_widget.looper.loop_exclusive = True
+		self.looper_widget.columns = 8
+		self.looper_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+		self.looper.signals.sig_state_changed.connect(self.looper_widget.play_button.setChecked)
+		self.looper_port_widgets = {}	# dict of DrumkitWidget, indexed on Jack.OwnMidiPort.name
+		# Setup synth - see slot_jack_port_registration
+		self.bashed_kit = Drumkit()
+		self.synth = Synth('MainWindow')
+		self.synth.sig_ports_ready.connect(self.slot_synth_ports_ready)
+		self.temp_sfz_filename = None
+		self.update_temp_sfz()
+		# Modify UI
+		self.frm_looper.layout().addWidget(self.looper_widget)
+		self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
 
 	# -----------------------------------------------------------------
 	# Setup functions:
@@ -171,12 +160,9 @@ class MainWindow(QMainWindow):
 	def show_hide_window_elements(self):
 		show_looper = int(self.settings.value("show_looper", 1)) == 1
 		show_statusbar = int(self.settings.value("show_statusbar", 1)) == 1
-		if self.frm_looper:
-			self.frm_looper.setVisible(show_looper)
-			self.action_Looper.setChecked(show_looper)
-			self.action_Looper.toggled.connect(self.show_looper)
-		else:
-			self.action_Looper.setEnabled(False)
+		self.frm_looper.setVisible(show_looper)
+		self.action_Looper.setChecked(show_looper)
+		self.action_Looper.toggled.connect(self.show_looper)
 		self.frm_statusbar.setVisible(show_statusbar)
 		self.action_Statusbar.setChecked(show_statusbar)
 		self.action_Statusbar.toggled.connect(self.show_statusbar)
@@ -196,10 +182,6 @@ class MainWindow(QMainWindow):
 		self.kits_area.setContextMenuPolicy(Qt.CustomContextMenu)
 		self.kits_area.customContextMenuRequested.connect(self.slot_kits_context_menu)
 		self.b_preview.toggled.connect(self.slot_preview_toggle)
-
-	@pyqtSlot()
-	def layout_complete(self):
-		pass
 
 	# -----------------------------------------------------------------
 	# Style functions:
@@ -317,7 +299,7 @@ class MainWindow(QMainWindow):
 		Determine if project loading is complete, reset "self.project_loading".
 		Returns True if complete
 		"""
-		if any(widget is None for widget in self.drumkit_widgets):
+		if any(drumkit_widget.drumkit is None for drumkit_widget in self.drumkit_widgets):
 			return False
 		self.project_loading = False
 		self.set_dirty(False)
@@ -379,9 +361,8 @@ class MainWindow(QMainWindow):
 		elif len(self.drumkit_widgets) == 1:
 			drumkit_widget.select_all()
 			self.bashed_kit = deepcopy(drumkit_widget.drumkit)
-			if self.looper:
-				for pitch in drumkit_widget.drumkit.instrument_pitches():
-					self.looper.set_mapping(pitch, drumkit_widget.port_number)
+			for pitch in drumkit_widget.drumkit.instrument_pitches():
+				self.looper.set_mapping(pitch, drumkit_widget.port_number)
 
 	@pyqtSlot(QObject)
 	def slot_drumkit_synth_ready(self, drumkit_widget):
@@ -397,9 +378,8 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(QObject)
 	def slot_remove_drumkit(self, drumkit_widget):
-		if self.looper:
-			self.looper.delete_port(drumkit_widget.port_number)
-			drumkit_widget.synth.quit()
+		self.looper.delete_port(drumkit_widget.port_number)
+		drumkit_widget.synth.quit()
 		self.drumkit_widgets.remove(drumkit_widget)
 		drumkit_widget.deleteLater()
 		for inst_id in self.bashed_kit.instrument_ids():
@@ -417,9 +397,6 @@ class MainWindow(QMainWindow):
 			"state": (bool) True if "checked"
 			"ctrl_state": (bool) True if CTRL key pressed when clicking
 		"""
-		logging.debug('%s "%s" %s' % (
-			source_widget.drumkit.name, inst_id,
-			('Checked' if state else 'Unchecked')))
 		# Deselect all other InstrumentButton if not CTRL key pressed:
 		if state and not ctrl_state:
 			for drumkit_widget in self.drumkit_widgets:
@@ -429,11 +406,10 @@ class MainWindow(QMainWindow):
 		elif not state:
 			source_widget.deselect_parent_group(inst_id)
 		# Enable/disable routing midi events to the source_widget's synth:
-		if self.looper:
-			self.looper.set_mapping(
-				MIDI_DRUM_PITCHES[inst_id],
-				source_widget.port_number if state else None)
-			self.b_preview.setEnabled(any(self.looper.pitch_maps.values()))
+		self.looper.set_mapping(
+			MIDI_DRUM_PITCHES[inst_id],
+			source_widget.port_number if state else None)
+		self.b_preview.setEnabled(any(self.looper.pitch_maps.values()))
 		# If the bashed kit is using the source kit's regions for this instrument,
 		# and the instrument is deselected, delete those regions.
 		# If the bashed kit is using ANOTHER kit's regions, (or no regions for this
@@ -449,10 +425,6 @@ class MainWindow(QMainWindow):
 			self.bashed_kit.import_instrument(inst_id, source_widget.drumkit)
 		self.set_dirty()
 
-	@pyqtSlot(Drumkit)
-	def slot_drumkit_imported(self, drumkit):
-		self.bashed_kit = drumkit
-
 	def update_temp_sfz(self):
 		old_filename = self.temp_sfz_filename
 		_, self.temp_sfz_filename = mkstemp(prefix='kitbash', suffix='.sfz', text=True)
@@ -463,9 +435,8 @@ class MainWindow(QMainWindow):
 			os.unlink(old_filename)
 
 	def save_bashed_sfz(self, filename, samples_mode = SAMPLES_SYMLINK):
-		self.target_sfz_filename = filename
-		with open(self.target_sfz_filename, 'w') as fob:
-			self.bashed_kit.write(fob, samples_mode)
+		self.saved_sfz_filename = filename
+		self.bashed_kit.save_as(self.saved_sfz_filename, samples_mode)
 
 	# -----------------------------------------------------------------
 	# JackConnectionManager slots
@@ -502,12 +473,11 @@ class MainWindow(QMainWindow):
 
 	def closeEvent(self, event):
 		logging.debug('MainWindow close()')
+		self.synth.quit()
+		for drumkit_widget in self.drumkit_widgets:
+			drumkit_widget.synth.quit()
 		if self.temp_sfz_filename and os.path.exists(self.temp_sfz_filename):
 			os.unlink(self.temp_sfz_filename)
-		if not self.options.no_audio:
-			self.synth.quit()
-			for drumkit_widget in self.drumkit_widgets:
-				drumkit_widget.synth.quit()
 		self.settings.setValue("geometry", self.saveGeometry())
 		self.settings.sync()
 		event.accept()
@@ -528,6 +498,8 @@ class MainWindow(QMainWindow):
 		Select bashed sfz for play preview; deselect all drumkits.
 		"""
 		self.looper.bashed_exclusive = state
+		self.lbl_audio_indicator.setPixmap(
+			PIXMAP_AUDIO_ON() if state else PIXMAP_AUDIO_OFF())
 
 	@pyqtSlot(QPoint)
 	def slot_kits_context_menu(self, position):
@@ -666,13 +638,11 @@ def main():
 	Write your help text!
 	"""
 	p.add_argument('Filename', type=str, nargs='*', help='SFZ file[s] to include at startup')
-	p.add_argument("--no-audio", "-q", action="store_true", help="Do not load LiquidSFZ and Jack interfaces")
 	p.add_argument("--log-file", "-l", type=str, help="Log to this file")
 	p.add_argument("--verbose", "-v", action="store_true", help="Show more detailed debug information")
 	options = p.parse_args()
 
-	#log_level = logging.DEBUG if options.verbose else logging.ERROR
-	log_level = logging.DEBUG
+	log_level = logging.DEBUG if options.verbose else logging.ERROR
 	log_format = "[%(filename)24s:%(lineno)4d] %(levelname)-8s %(message)s"
 	if options.log_file:
 		logging.basicConfig(
@@ -698,7 +668,7 @@ def main():
 
 	app = QApplication([])
 	try:
-		main_window = MainWindow(options)
+		main_window = MainWindow()
 	except JackConnectError:
 		DevilBox('Could not connect to JACK server. Is it running?')
 		sys.exit(1)

@@ -217,7 +217,7 @@ class JackConnectionManager(QObject):
 			if not port.is_midi]))
 
 	def connect(self, outport, inport):
-		logging.debug('Connecting %s -> %s', outport.name, inport.name)
+		#logging.debug('Connecting %s -> %s', outport.name, inport.name)
 		jacklib.connect(self.client, outport.name, inport.name)
 
 #  end kitbash/connection_manager.py

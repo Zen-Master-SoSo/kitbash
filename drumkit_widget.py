@@ -42,14 +42,14 @@ class DrumkitWidget(QFrame):
 
 	def __init__(self, filename, parent):
 		super().__init__(parent)
+		self.looper = parent.looper
 		self.filename = filename
 		self.moniker = basename(self.filename)
-		if parent.options.no_audio:
-			self.synth = None
-		else:
-			self.synth = Synth(self.moniker)
-			self.synth.sig_ports_ready.connect(self.slot_synth_ports_ready)
-			self.synth.load(self.filename)
+		self.drumkit = None
+
+		self.synth = Synth(self.moniker)
+		self.synth.sig_ports_ready.connect(self.slot_synth_ports_ready)
+		self.synth.load(self.filename)
 
 		self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 		self.setFrameStyle(QFrame.Panel)
@@ -76,9 +76,9 @@ class DrumkitWidget(QFrame):
 		self.hide_button.toggled.connect(self.hide)
 		top_layout.addWidget(self.hide_button)
 
-		audio_indicator = QLabel(self)
-		audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
-		top_layout.addWidget(audio_indicator)
+		self.audio_indicator = QLabel(self)
+		self.audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
+		top_layout.addWidget(self.audio_indicator)
 
 		self.lbl_use_count = QLabel(self)
 		self.lbl_use_count.setText('(0)')
@@ -187,8 +187,11 @@ class DrumkitWidget(QFrame):
 		"""
 		use_count = len([ b for b in self.frm_groups.findChildren(InstrumentButton) if b.isChecked() ])
 		self.lbl_use_count.setText('(%d)' % use_count)
+		self.audio_indicator.setPixmap(
+			PIXMAP_AUDIO_ON() if bool(use_count) and not self.looper.bashed_exclusive \
+			else PIXMAP_AUDIO_OFF())
 		font = self.lbl_use_count.font()
-		font.setBold(use_count > 0)
+		font.setBold(bool(use_count))
 		self.lbl_use_count.setFont(font)
 
 	def ctrl_pressed(self):
