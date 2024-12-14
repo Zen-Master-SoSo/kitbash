@@ -407,11 +407,6 @@ class MainWindow(QMainWindow):
 				self.bashed_kit.delete_instrument(inst_id)
 		self.set_dirty()
 
-	def drumkit_widget(self, filename):
-		for widget in self.drumkit_widgets:
-			if widget.filename == filename:
-				return widget
-
 	@pyqtSlot(QObject, str, bool, bool)
 	def slot_inst_toggle(self, source_widget, inst_id, state, ctrl_state):
 		"""
@@ -438,10 +433,11 @@ class MainWindow(QMainWindow):
 			self.looper.set_mapping(
 				MIDI_DRUM_PITCHES[inst_id],
 				source_widget.port_number if state else None)
+			self.b_preview.setEnabled(any(self.looper.pitch_maps.values()))
 		# If the bashed kit is using the source kit's regions for this instrument,
 		# and the instrument is deselected, delete those regions.
-		# If the bashed kit is using ANOTHER kit's regions, or NO regions for this instrument,
-		# and the instrument is SELECTED, import those regions from the source kit.
+		# If the bashed kit is using ANOTHER kit's regions, (or no regions for this
+		# instrument), and the instrument is SELECTED, import those regions.
 		try:
 			bashed_source = self.bashed_kit.instrument(inst_id).source_filename
 		except KeyError:
@@ -452,7 +448,6 @@ class MainWindow(QMainWindow):
 		elif state:
 			self.bashed_kit.import_instrument(inst_id, source_widget.drumkit)
 		self.set_dirty()
-		self.b_preview.setEnabled(any(self.looper.pitch_maps.values()))
 
 	@pyqtSlot(Drumkit)
 	def slot_drumkit_imported(self, drumkit):
