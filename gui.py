@@ -55,7 +55,8 @@ from kitbash import (
 	LOOPER_PORT_NAME,
 	LOOPER_PORT_FORMAT,
 	LOOPER_BASHED_PORT,
-	SAMPLES_SYMLINK
+	SAMPLES_SYMLINK,
+	SAMPLES_ABSPATH
 )
 from kitbash.looper import KitbashLooper
 from kitbash.drumkit import Drumkit
@@ -145,11 +146,10 @@ class MainWindow(QMainWindow):
 		self.looper.signals.sig_state_changed.connect(self.looper_widget.play_button.setChecked)
 		self.looper_port_widgets = {}	# dict of DrumkitWidget, indexed on Jack.OwnMidiPort.name
 		# Setup synth - see slot_jack_port_registration
-		self.bashed_kit = Drumkit()
 		self.synth = Synth('MainWindow')
 		self.synth.sig_ports_ready.connect(self.slot_synth_ports_ready)
 		self.temp_sfz_filename = None
-		self.update_temp_sfz()
+		self.synth.load(os.path.join(PACKAGE_DIR, 'res', 'empty.sfz'))
 		# Modify UI
 		self.frm_looper.layout().addWidget(self.looper_widget)
 		self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
@@ -360,9 +360,9 @@ class MainWindow(QMainWindow):
 			self.check_project_load_complete()
 		elif len(self.drumkit_widgets) == 1:
 			drumkit_widget.select_all()
-			self.bashed_kit = deepcopy(drumkit_widget.drumkit)
 			for pitch in drumkit_widget.drumkit.instrument_pitches():
 				self.looper.set_mapping(pitch, drumkit_widget.port_number)
+			self.b_preview.setEnabled(True)
 
 	@pyqtSlot(QObject)
 	def slot_drumkit_synth_ready(self, drumkit_widget):
@@ -382,9 +382,6 @@ class MainWindow(QMainWindow):
 		drumkit_widget.synth.quit()
 		self.drumkit_widgets.remove(drumkit_widget)
 		drumkit_widget.deleteLater()
-		for inst_id in self.bashed_kit.instrument_ids():
-			if self.bashed_kit.instrument(inst_id).source_filename == drumkit_widget.filename:
-				self.bashed_kit.delete_instrument(inst_id)
 		self.set_dirty()
 
 	@pyqtSlot(QObject, str, bool, bool)
@@ -410,29 +407,29 @@ class MainWindow(QMainWindow):
 			MIDI_DRUM_PITCHES[inst_id],
 			source_widget.port_number if state else None)
 		self.b_preview.setEnabled(any(self.looper.pitch_maps.values()))
-		# If the bashed kit is using the source kit's regions for this instrument,
-		# and the instrument is deselected, delete those regions.
-		# If the bashed kit is using ANOTHER kit's regions, (or no regions for this
-		# instrument), and the instrument is SELECTED, import those regions.
-		try:
-			bashed_source = self.bashed_kit.instrument(inst_id).source_filename
-		except KeyError:
-			bashed_source = None
-		if bashed_source == source_widget.filename:
-			if not state:
-				self.bashed_kit.delete_instrument(inst_id)
-		elif state:
-			self.bashed_kit.import_instrument(inst_id, source_widget.drumkit)
 		self.set_dirty()
 
-	def update_temp_sfz(self):
-		old_filename = self.temp_sfz_filename
-		_, self.temp_sfz_filename = mkstemp(prefix='kitbash', suffix='.sfz', text=True)
-		with open(self.temp_sfz_filename, 'w') as fob:
-			self.bashed_kit.write(fob)
-		self.synth.load(self.temp_sfz_filename)
-		if old_filename and os.path.exists(old_filename):
-			os.unlink(old_filename)
+	@pyqtSlot(bool)
+	def slot_preview_toggle(self, state):
+		"""
+		Select bashed sfz for play preview; deselect all drumkits.
+		"""
+		if not self.looper.bashed_exclusive and state:
+			# Going from no preview to preview state:
+			self.bashed_kit = Drumkit()
+			for drumkit_widget in self.drumkit_widgets:
+				for inst_id in drumkit_widget.selected_instrument_ids():
+					self.bashed_kit.import_instrument(inst_id, drumkit_widget.drumkit)
+			if self.temp_sfz_filename:
+				os.unlink(self.temp_sfz_filename)
+			_, self.temp_sfz_filename = mkstemp(prefix='kitbash', suffix='.sfz', text=True)
+			self.bashed_kit.save_as(self.temp_sfz_filename, SAMPLES_ABSPATH)
+			logging.debug('Created .sfz at %s', self.temp_sfz_filename)
+			self.synth.load(self.temp_sfz_filename)
+		self.looper.bashed_exclusive = state
+		self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_ON() if state else PIXMAP_AUDIO_OFF())
+		for drumkit_widget in self.drumkit_widgets:
+			drumkit_widget.update_count() # Updates pixmap
 
 	def save_bashed_sfz(self, filename, samples_mode = SAMPLES_SYMLINK):
 		self.saved_sfz_filename = filename
@@ -491,15 +488,6 @@ class MainWindow(QMainWindow):
 
 	# -----------------------------------------------------------------
 	# UI handling slots:
-
-	@pyqtSlot(bool)
-	def slot_preview_toggle(self, state):
-		"""
-		Select bashed sfz for play preview; deselect all drumkits.
-		"""
-		self.looper.bashed_exclusive = state
-		self.lbl_audio_indicator.setPixmap(
-			PIXMAP_AUDIO_ON() if state else PIXMAP_AUDIO_OFF())
 
 	@pyqtSlot(QPoint)
 	def slot_kits_context_menu(self, position):

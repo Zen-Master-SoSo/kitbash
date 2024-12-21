@@ -76,9 +76,9 @@ class DrumkitWidget(QFrame):
 		self.hide_button.toggled.connect(self.hide)
 		top_layout.addWidget(self.hide_button)
 
-		self.audio_indicator = QLabel(self)
-		self.audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
-		top_layout.addWidget(self.audio_indicator)
+		self.lbl_audio_indicator = QLabel(self)
+		self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
+		top_layout.addWidget(self.lbl_audio_indicator)
 
 		self.lbl_use_count = QLabel(self)
 		self.lbl_use_count.setText('(0)')
@@ -184,10 +184,11 @@ class DrumkitWidget(QFrame):
 	def update_count(self):
 		"""
 		Updates the "use count" label with the number of selected instruments.
+		Sets the audio indicator pixmap based on if playing or not.
 		"""
 		use_count = len([ b for b in self.frm_groups.findChildren(InstrumentButton) if b.isChecked() ])
 		self.lbl_use_count.setText('(%d)' % use_count)
-		self.audio_indicator.setPixmap(
+		self.lbl_audio_indicator.setPixmap(
 			PIXMAP_AUDIO_ON() if bool(use_count) and not self.looper.bashed_exclusive \
 			else PIXMAP_AUDIO_OFF())
 		font = self.lbl_use_count.font()
