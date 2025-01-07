@@ -350,7 +350,7 @@ class Drumkit:
 	def save_as(self, filename, samples_mode = SAMPLES_ABSPATH):
 		"""
 		Save in SFZ format to the given filename.
-		"samples_mode" is a kibash constant which defines how to render "sample"
+		"samples_mode" is a kitbash constant which defines how to render "sample"
 		opcodes. May be one of:
 			SAMPLES_ABSPATH		SAMPLES_RESOLVE		SAMPLES_COPY
 			SAMPLES_SYMLINK		SAMPLES_HARDLINK
