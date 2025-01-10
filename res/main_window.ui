@@ -13,10 +13,6 @@
   <property name="windowTitle">
    <string>kitbash</string>
   </property>
-  <property name="windowIcon">
-   <iconset>
-    <normaloff>musecbox-icon.png</normaloff>musecbox-icon.png</iconset>
-  </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="vlo1" stretch="0,10,0">
     <property name="spacing">
