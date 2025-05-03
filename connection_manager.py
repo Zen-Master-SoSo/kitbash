@@ -9,10 +9,8 @@ from queue import Queue
 import jacklib
 from jacklib.helpers import c_char_p_p_to_list
 from jacklib.helpers import get_jack_status_error_string
-from PyQt5.QtCore import (
-	QObject,
-	pyqtSignal
-)
+from PyQt5.QtCore import QObject, pyqtSignal
+
 
 class JackPort:
 
@@ -217,7 +215,7 @@ class JackConnectionManager(QObject):
 			if not port.is_midi]))
 
 	def connect(self, outport, inport):
-		#logging.debug('Connecting %s -> %s', outport.name, inport.name)
 		jacklib.connect(self.client, outport.name, inport.name)
+
 
 #  end kitbash/connection_manager.py

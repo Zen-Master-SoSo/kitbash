@@ -2,79 +2,31 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
-import sys
-import os
-import argparse
-import logging
-import json
-import glob
-from copy import deepcopy
+import sys, os, argparse, logging, json, glob
 from tempfile import mkstemp
 from functools import partial
 from signal import signal, SIGINT, SIGTERM
 from recent_items_list import RecentItemsList
-from qt_extras import (
-	ShutUpQT,
-	SigBlock,
-	DevilBox
-)
+from qt_extras import ShutUpQT, DevilBox
 from qt_extras.list_layout import VListLayout
 from midi_notes import MIDI_DRUM_PITCHES
 from jack_midi_looper.looper_widget import LooperWidget
 
 # PyQt5 imports
 from PyQt5 import uic
-from PyQt5.QtCore import (
-	Qt,
-	pyqtSignal,
-	pyqtSlot,
-	QObject,
-	QTimer,
-	QEvent,
-	QSettings,
-	QThreadPool,
-	QRunnable,
-	QPoint
-)
-from PyQt5.QtWidgets import (
-	QApplication,
-	QMainWindow,
-	QMessageBox,
-	QPushButton,
-	QAction,
-	QActionGroup,
-	QMenu,
-	QSizePolicy
-)
+from PyQt5.QtCore import	Qt, pyqtSignal, pyqtSlot, QObject, \
+							QSettings, QThreadPool, QRunnable, QPoint
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog, \
+							QAction, QActionGroup, QMenu, QSizePolicy
 
-from kitbash import (
-	loops_database,
-	APPLICATION_NAME,
-	PACKAGE_DIR,
-	LOOPER_CLIENT_NAME,
-	LOOPER_PORT_NAME,
-	LOOPER_PORT_FORMAT,
-	LOOPER_BASHED_PORT,
-	SAMPLES_SYMLINK,
-	SAMPLES_ABSPATH
-)
+from kitbash import loops_database, APPLICATION_NAME, PACKAGE_DIR, \
+					SAMPLES_SYMLINK, SAMPLES_ABSPATH
 from kitbash.looper import KitbashLooper
 from kitbash.drumkit import Drumkit
-from kitbash.drumkit_widget import (
-	DrumkitWidget,
-	GroupButton,
-	InstrumentButton
-)
+from kitbash.drumkit_widget import DrumkitWidget
 from kitbash.synth import Synth
-from kitbash.icons import (
-	PIXMAP_AUDIO_OFF,
-	PIXMAP_AUDIO_ON
-)
-from kitbash.connection_manager import (
-	JackConnectionManager,
-	JackPort,
-	JackConnectError
-)
+from kitbash.icons import PIXMAP_AUDIO_OFF, PIXMAP_AUDIO_ON
+from kitbash.connection_manager import JackConnectionManager, JackPort, JackConnectError
 
 
 class MainWindow(QMainWindow):
@@ -105,6 +57,8 @@ class MainWindow(QMainWindow):
 		self.project_definition = None
 		self.project_clearing = False
 		self.project_loading = False
+		self.bashed_kit = None
+		self.saved_sfz_filename = None
 		self._dirty = False
 
 		signal(SIGINT, self.system_signal)
@@ -226,7 +180,8 @@ class MainWindow(QMainWindow):
 	def set_dirty(self, state=True):
 		if not self.project_loading:
 			self._dirty = state
-			title = APPLICATION_NAME if self.project_file is None else f"{self.project_file} [{APPLICATION_NAME}]"
+			title = APPLICATION_NAME if self.project_file is None \
+				else f"{self.project_file} [{APPLICATION_NAME}]"
 			self.setWindowTitle("* " + title if self._dirty else title)
 
 	def compile_project_def(self):
@@ -287,8 +242,10 @@ class MainWindow(QMainWindow):
 			with open(self.project_file, 'r') as fh:
 				self.project_definition = json.load(fh)
 		except json.JSONDecodeError as e:
-			DevilBox('There was a problem decoding "{0}"' + \
-				'\nAre you sure it is a kitbash project?'.format(self.project_file))
+			DevilBox('There was a problem decoding:\n' +
+				f'"{self.project_file}"\n' + \
+				f'"{e}"\n' + \
+				'Are you sure it is a kitbash project?')
 		else:
 			self.register_recent_project()
 			for filename in self.project_definition.keys():
@@ -322,7 +279,9 @@ class MainWindow(QMainWindow):
 
 	def _connect_audio_outs(self, synth):
 		audio_client = self.lbl_audio_client.text()
-		audio_in_ports = [ port for port in self.conn_man.physical_input_ports() if port.client_name == audio_client ]
+		audio_in_ports = [ port for port \
+			in self.conn_man.physical_input_ports() \
+			if port.client_name == audio_client ]
 		for src,tgt in zip(synth.audio_outs, audio_in_ports):
 			self.conn_man.connect(src, tgt)
 
@@ -494,7 +453,8 @@ class MainWindow(QMainWindow):
 		menu = QMenu()
 		clicked_drumkit_widget = self.kits_area.childAt(position)
 		if clicked_drumkit_widget is not None:
-			while not isinstance(clicked_drumkit_widget, DrumkitWidget) and clicked_drumkit_widget.parent() is not None:
+			while not isinstance(clicked_drumkit_widget, DrumkitWidget) and \
+				clicked_drumkit_widget.parent() is not None:
 				clicked_drumkit_widget = clicked_drumkit_widget.parent()
 			if isinstance(clicked_drumkit_widget, DrumkitWidget):
 				action = QAction(f'Remove "{clicked_drumkit_widget.moniker}"', self)

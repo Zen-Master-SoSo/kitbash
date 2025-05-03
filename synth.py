@@ -8,10 +8,7 @@ Provides Synth class
 import logging
 from collections import deque
 from liquiphy import LiquidSFZ
-from PyQt5.QtCore import (
-	pyqtSignal,
-	QObject
-)
+from PyQt5.QtCore import pyqtSignal, QObject
 
 class Synth(QObject):
 	"""

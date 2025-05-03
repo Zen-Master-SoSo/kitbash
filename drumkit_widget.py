@@ -6,20 +6,10 @@ import logging
 from os.path import basename
 from functools import partial
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtCore import QObject
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtCore import pyqtSlot
-from PyQt5.QtCore import QSize
-from PyQt5.QtGui import QIcon
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtWidgets import QVBoxLayout
-from PyQt5.QtWidgets import QHBoxLayout
-from PyQt5.QtWidgets import QLabel
-from PyQt5.QtWidgets import QFrame
-from PyQt5.QtWidgets import QSizePolicy
-from PyQt5.QtWidgets import QPushButton
+from PyQt5.QtCore import Qt, QObject, pyqtSignal, pyqtSlot, QSize
+from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, \
+							QLabel, QFrame, QSizePolicy, QPushButton
 
 from qt_extras import SigBlock
 from liquiphy import LiquidSFZ
