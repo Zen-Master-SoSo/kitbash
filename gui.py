@@ -8,7 +8,7 @@ from tempfile import mkstemp
 from functools import partial
 from signal import signal, SIGINT, SIGTERM
 from recent_items_list import RecentItemsList
-from qt_extras import ShutUpQT, DevilBox
+from qt_extras import ShutUpQT, SigBlock, DevilBox
 from qt_extras.list_layout import VListLayout
 from midi_notes import MIDI_DRUM_PITCHES
 from liquiphy import LiquidSFZ
@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
 
 	instance = None
 	initialized = False
-	sig_ports_complete = pyqtSignal(QObject)
+	sig_ports_complete = pyqtSignal()
 
 	def __new__(cls):
 		if cls.instance is None:
@@ -75,7 +75,6 @@ class MainWindow(QMainWindow):
 		self.connect_actions()
 		# Setup KitLoader threadpool
 		self.background_threadpool = QThreadPool()
-		self.background_threadpool.setMaxThreadCount(16)
 		# Setup connection manager and synth creation pool
 		self.conn_man = JackConnectionManager()
 		self.conn_man.on_error(self.jack_error)
@@ -91,7 +90,7 @@ class MainWindow(QMainWindow):
 		self.cmb_midi_srcs.currentTextChanged.connect(self.slot_midi_src_changed)
 		self.cmb_audio_sinks.currentTextChanged.connect(self.slot_audio_sink_changed)
 		# Setup MidiSplitter
-		self.midi_splitter = MidiSplitter('kitbash')
+		self.midi_splitter = MidiSplitter(APPLICATION_NAME)
 		self.splitter_assignments = [ None for i in range(16) ]
 		# Setup signals
 		signal(SIGINT, self.system_signal)
@@ -256,15 +255,24 @@ class MainWindow(QMainWindow):
 	# Source / sink combo boxes
 
 	def fill_cmb_sources(self):
-		self.cmb_midi_srcs.addItem('')
-		for port in self.conn_man.output_ports():
-			if port.is_midi:
-				self.cmb_midi_srcs.addItem(port.name)
+		with SigBlock(self.cmb_midi_srcs):
+			self.cmb_midi_srcs.clear()
+			self.cmb_midi_srcs.addItem('')
+			for port in self.conn_man.output_ports():
+				if port.is_midi and APPLICATION_NAME not in port.name:
+					self.cmb_midi_srcs.addItem(port.name)
+			logging.debug('Filling sources; current midi source: %s', self.current_midi_source)
+			if self.current_midi_source:
+				self.cmb_midi_srcs.setCurrentText(self.current_midi_source)
 
 	def fill_cmb_sinks(self):
-		items = ['']
-		items.extend(self.conn_man.physical_playback_clients())
-		self.cmb_audio_sinks.addItems(items)
+		with SigBlock(self.cmb_audio_sinks):
+			self.cmb_audio_sinks.clear()
+			items = ['']
+			items.extend(self.conn_man.physical_playback_clients())
+			self.cmb_audio_sinks.addItems(items)
+			if self.current_audio_sink:
+				self.cmb_audio_sinks.setCurrentText(self.current_audio_sink)
 
 	@pyqtSlot(str)
 	def slot_midi_src_changed(self, value):
@@ -272,6 +280,7 @@ class MainWindow(QMainWindow):
 			self.conn_man.disconnect_by_name(self.current_midi_source, self.midi_splitter.input_port.name)
 			self.conn_man.disconnect_by_name(self.current_midi_source, self.synth.input_port.name)
 		self.current_midi_source = value
+		logging.debug('slot_midi_src_changed; current midi source: %s', self.current_midi_source)
 		if self.current_midi_source:
 			self.conn_man.connect_by_name(self.current_midi_source, self.midi_splitter.input_port.name)
 			self.conn_man.connect_by_name(self.current_midi_source, self.synth.input_port.name)
@@ -330,12 +339,10 @@ class MainWindow(QMainWindow):
 		self.close()
 
 	def jack_client_registration(self, client_name, action):
-		logging.debug('Client "%s" %s', client_name, 'registered' if action else 'gone')
 		if action and self.new_synth and 'liquidsfz' in client_name:
 			self.new_synth.client_name = client_name
 
 	def jack_port_registration(self, port, action):
-		logging.debug('Port "%s" %s', port, 'registered' if action else 'gone')
 		if action and \
 			self.new_synth and \
 			self.new_synth.client_name and \
@@ -347,17 +354,19 @@ class MainWindow(QMainWindow):
 			else:
 				logging.error('Incorrect port type: %s', port)
 			if self.new_synth.input_port and len(self.new_synth.output_ports) == 2:
-				logging.debug('%s ports complete', self.new_synth.client_name)
-				associated_object = self.synth_creation_queue.popleft()
-				associated_object.synth = self.new_synth
-				if len(self.synth_creation_queue):
-					self.start_new_synth()
-				else:
-					self.new_synth = None
-				self.sig_ports_complete.emit(associated_object)
+				self.sig_ports_complete.emit()
+		elif port.is_output and port.is_midi and APPLICATION_NAME not in port.name:
+			self.fill_cmb_sources()
 
-	@pyqtSlot(QObject)
-	def slot_ports_complete(self, associated_object):
+	@pyqtSlot()
+	def slot_ports_complete(self):
+		associated_object = self.synth_creation_queue.popleft()
+		associated_object.synth = self.new_synth
+		logging.debug('Assigned %s to %s', self.new_synth.client_name, associated_object)
+		if len(self.synth_creation_queue):
+			self.start_new_synth()
+		else:
+			self.new_synth = None
 		self.connect_audio_sink(associated_object.synth)
 		if isinstance(associated_object, DrumkitWidget):
 			src = self.midi_splitter.output_ports[associated_object.port_number].name
@@ -503,7 +512,7 @@ class MainWindow(QMainWindow):
 		if self.sfz_filename and os.path.exists(self.sfz_filename):
 			os.unlink(self.sfz_filename)
 		settings().setValue("geometry", self.saveGeometry())
-		settings().sync()
+		logging.debug('Total %d xruns', self.current_xruns)
 		event.accept()
 
 	# -----------------------------------------------------------------
@@ -656,7 +665,7 @@ class KitBasher(QRunnable):
 		for drumkit_widget in self.drumkit_widgets:
 			for inst_id in drumkit_widget.selected_instrument_ids():
 				bashed_kit.import_instrument(inst_id, drumkit_widget.drumkit)
-		_, sfz_filename = mkstemp(prefix='kitbash', suffix='.sfz', text=True)
+		_, sfz_filename = mkstemp(prefix = APPLICATION_NAME, suffix = '.sfz', text = True)
 		bashed_kit.save_as(sfz_filename, SAMPLES_ABSPATH)
 		logging.debug('Created .sfz at %s', sfz_filename)
 
