@@ -14,262 +14,181 @@
    <string>kitbash</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="vlo1" stretch="0,10,0">
+   <layout class="QVBoxLayout" name="verticalLayout">
     <property name="spacing">
      <number>4</number>
     </property>
     <property name="leftMargin">
-     <number>4</number>
+     <number>3</number>
     </property>
     <property name="topMargin">
-     <number>4</number>
+     <number>3</number>
     </property>
     <property name="rightMargin">
-     <number>4</number>
+     <number>3</number>
     </property>
     <property name="bottomMargin">
-     <number>4</number>
+     <number>3</number>
     </property>
     <item>
-     <widget class="QFrame" name="frm_looper">
-      <property name="minimumSize">
-       <size>
-        <width>0</width>
-        <height>42</height>
-       </size>
-      </property>
-      <property name="frameShape">
-       <enum>QFrame::Box</enum>
-      </property>
-      <property name="frameShadow">
-       <enum>QFrame::Sunken</enum>
-      </property>
-      <property name="lineWidth">
-       <number>1</number>
-      </property>
-      <layout class="QHBoxLayout" name="looper_layout">
+     <widget class="QFrame" name="frm_controls">
+      <layout class="QHBoxLayout" name="horizontalLayout_4">
        <property name="spacing">
-        <number>0</number>
+        <number>8</number>
        </property>
        <property name="leftMargin">
-        <number>2</number>
-       </property>
-       <property name="topMargin">
-        <number>2</number>
-       </property>
-       <property name="rightMargin">
-        <number>2</number>
-       </property>
-       <property name="bottomMargin">
-        <number>2</number>
-       </property>
-      </layout>
-     </widget>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="hlo_main" stretch="0,10">
-      <item>
-       <layout class="QVBoxLayout" name="vlo_target">
-        <item>
-         <widget class="QFrame" name="frm_target">
-          <property name="frameShape">
-           <enum>QFrame::StyledPanel</enum>
-          </property>
-          <property name="frameShadow">
-           <enum>QFrame::Raised</enum>
-          </property>
-          <layout class="QVBoxLayout" name="verticalLayout">
-           <property name="spacing">
-            <number>6</number>
-           </property>
-           <property name="leftMargin">
-            <number>4</number>
-           </property>
-           <property name="topMargin">
-            <number>6</number>
-           </property>
-           <property name="rightMargin">
-            <number>4</number>
-           </property>
-           <property name="bottomMargin">
-            <number>6</number>
-           </property>
-           <item>
-            <widget class="QLabel" name="lbl4">
-             <property name="text">
-              <string>Target Drumkit</string>
-             </property>
-             <property name="textFormat">
-              <enum>Qt::PlainText</enum>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="lbl_audio_indicator">
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="b_preview">
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
-             <property name="text">
-              <string>Preview</string>
-             </property>
-             <property name="checkable">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </widget>
-        </item>
-        <item>
-         <widget class="QFrame" name="frm_audio_out">
-          <property name="frameShape">
-           <enum>QFrame::StyledPanel</enum>
-          </property>
-          <property name="frameShadow">
-           <enum>QFrame::Raised</enum>
-          </property>
-          <layout class="QVBoxLayout" name="vlo3">
-           <property name="spacing">
-            <number>4</number>
-           </property>
-           <property name="leftMargin">
-            <number>4</number>
-           </property>
-           <property name="topMargin">
-            <number>6</number>
-           </property>
-           <property name="rightMargin">
-            <number>4</number>
-           </property>
-           <property name="bottomMargin">
-            <number>6</number>
-           </property>
-           <item>
-            <widget class="QLabel" name="lbl2">
-             <property name="text">
-              <string>Audio out client:</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="lbl_audio_client">
-             <property name="font">
-              <font>
-               <weight>75</weight>
-               <bold>true</bold>
-              </font>
-             </property>
-             <property name="frameShape">
-              <enum>QFrame::Panel</enum>
-             </property>
-             <property name="frameShadow">
-              <enum>QFrame::Sunken</enum>
-             </property>
-             <property name="text">
-              <string>[not connected]</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </widget>
-        </item>
-        <item>
-         <spacer name="verticalSpacer_2">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>40</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-       </layout>
-      </item>
-      <item>
-       <widget class="QScrollArea" name="drums_scroller">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="widgetResizable">
-         <bool>true</bool>
-        </property>
-        <widget class="QWidget" name="kits_area">
-         <property name="geometry">
-          <rect>
-           <x>0</x>
-           <y>0</y>
-           <width>837</width>
-           <height>666</height>
-          </rect>
-         </property>
-        </widget>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <widget class="QFrame" name="frm_statusbar">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="minimumSize">
-       <size>
-        <width>0</width>
-        <height>18</height>
-       </size>
-      </property>
-      <property name="maximumSize">
-       <size>
-        <width>16777215</width>
-        <height>18</height>
-       </size>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">QFrame * { color: #888 }</string>
-      </property>
-      <layout class="QHBoxLayout" name="hlo1">
-       <property name="leftMargin">
-        <number>6</number>
+        <number>4</number>
        </property>
        <property name="topMargin">
         <number>0</number>
        </property>
        <property name="rightMargin">
-        <number>6</number>
+        <number>4</number>
        </property>
        <property name="bottomMargin">
         <number>0</number>
        </property>
        <item>
-        <widget class="QLabel" name="l_status">
+        <layout class="QHBoxLayout" name="hlo_preview">
+         <property name="spacing">
+          <number>4</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl_audio_indicator">
+           <property name="minimumSize">
+            <size>
+             <width>21</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="frameShadow">
+            <enum>QFrame::Raised</enum>
+           </property>
+           <property name="midLineWidth">
+            <number>1</number>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="lbl1">
+           <property name="text">
+            <string>Bashed kit:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="b_preview">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="text">
+            <string>Preview</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="hlo_src">
+         <property name="spacing">
+          <number>4</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl2">
+           <property name="text">
+            <string>MIDI Source:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="cmb_midi_srcs"/>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="hlo_sink">
+         <property name="spacing">
+          <number>4</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="lbl3">
+           <property name="text">
+            <string>Audio sink:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="cmb_audio_sinks"/>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>411</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl4">
          <property name="text">
-          <string>Status</string>
+          <string>Splitter time:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_splitter_time">
+         <property name="text">
+          <string>0.00</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="b_xruns">
+         <property name="text">
+          <string>XRuns</string>
          </property>
         </widget>
        </item>
       </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QScrollArea" name="drums_scroller">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="frameShadow">
+       <enum>QFrame::Plain</enum>
+      </property>
+      <property name="widgetResizable">
+       <bool>true</bool>
+      </property>
+      <widget class="QWidget" name="kits_area">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>974</width>
+         <height>707</height>
+        </rect>
+       </property>
+      </widget>
      </widget>
     </item>
    </layout>
@@ -297,16 +216,16 @@
       <string>Recent &amp;Drumkits</string>
      </property>
     </widget>
-    <addaction name="action_NewProject"/>
-    <addaction name="action_OpenProject"/>
+    <addaction name="action_new_project"/>
+    <addaction name="action_open_project"/>
+    <addaction name="action_save_project"/>
     <addaction name="menu_RecentProject"/>
     <addaction name="separator"/>
-    <addaction name="action_SaveProject"/>
-    <addaction name="separator"/>
-    <addaction name="action_LoadKit"/>
+    <addaction name="action_load_kit"/>
     <addaction name="menu_RecentDrumkits"/>
+    <addaction name="action_save_bashed_kit"/>
     <addaction name="separator"/>
-    <addaction name="action_Quit"/>
+    <addaction name="action_quit"/>
    </widget>
    <widget class="QMenu" name="menu_View">
     <property name="title">
@@ -317,17 +236,15 @@
       <string>St&amp;yle</string>
      </property>
     </widget>
-    <addaction name="action_Looper"/>
-    <addaction name="action_Statusbar"/>
-    <addaction name="action_CollapseKits"/>
+    <addaction name="action_collapse_kits"/>
     <addaction name="separator"/>
     <addaction name="menu_Style"/>
-    <addaction name="action_ReloadStyle"/>
+    <addaction name="action_reload_style"/>
    </widget>
    <addaction name="menu_File"/>
    <addaction name="menu_View"/>
   </widget>
-  <action name="action_LoadKit">
+  <action name="action_load_kit">
    <property name="text">
     <string>Load SFZ Drum&amp;Kit</string>
    </property>
@@ -338,7 +255,7 @@
     <string>Ctrl+K</string>
    </property>
   </action>
-  <action name="action_Quit">
+  <action name="action_quit">
    <property name="text">
     <string>&amp;Quit</string>
    </property>
@@ -349,21 +266,7 @@
     <string>Ctrl+Q</string>
    </property>
   </action>
-  <action name="action_Statusbar">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="checked">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>&amp;Statusbar</string>
-   </property>
-   <property name="toolTip">
-    <string>Show/hide the status bar</string>
-   </property>
-  </action>
-  <action name="action_NewProject">
+  <action name="action_new_project">
    <property name="text">
     <string>&amp;New</string>
    </property>
@@ -374,18 +277,18 @@
     <string>Ctrl+N</string>
    </property>
   </action>
-  <action name="action_SaveProject">
+  <action name="action_save_project">
    <property name="text">
-    <string>&amp;Save</string>
+    <string>Save &amp;Project</string>
    </property>
    <property name="toolTip">
     <string>Save the current project</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+S</string>
+    <string>Ctrl+Shift+S</string>
    </property>
   </action>
-  <action name="action_ReloadStyle">
+  <action name="action_reload_style">
    <property name="text">
     <string>Reload style</string>
    </property>
@@ -396,18 +299,7 @@
     <string>F5</string>
    </property>
   </action>
-  <action name="action_Looper">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>&amp;Looper</string>
-   </property>
-   <property name="toolTip">
-    <string>Show/hide the looper bar</string>
-   </property>
-  </action>
-  <action name="action_CollapseKits">
+  <action name="action_collapse_kits">
    <property name="text">
     <string>Collapse &amp;Kits</string>
    </property>
@@ -415,7 +307,7 @@
     <string>Collapse all drumkit widgets</string>
    </property>
   </action>
-  <action name="action_OpenProject">
+  <action name="action_open_project">
    <property name="text">
     <string>&amp;Open project</string>
    </property>
@@ -426,11 +318,22 @@
     <string>Ctrl+O</string>
    </property>
   </action>
+  <action name="action_save_bashed_kit">
+   <property name="text">
+    <string>&amp;Save bashed kit</string>
+   </property>
+   <property name="toolTip">
+    <string>Save the current instrument selections as a new .sfz</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
+   </property>
+  </action>
  </widget>
  <resources/>
  <connections>
   <connection>
-   <sender>action_Quit</sender>
+   <sender>action_quit</sender>
    <signal>triggered()</signal>
    <receiver>MainWindow</receiver>
    <slot>close()</slot>

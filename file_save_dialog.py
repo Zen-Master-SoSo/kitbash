@@ -3,31 +3,16 @@
 #  Copyright 2024 liyang <liyang@veronica>
 import sys
 from functools import partial
-from PyQt5.QtCore import Qt
-from PyQt5.QtCore import QCoreApplication
-from PyQt5.QtCore import pyqtSlot
-from PyQt5.QtWidgets import QFileDialog
-from PyQt5.QtWidgets import QLabel
-from PyQt5.QtWidgets import QPushButton
-from PyQt5.QtWidgets import QMainWindow
-from PyQt5.QtWidgets import QWidget
-from PyQt5.QtWidgets import QVBoxLayout
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtWidgets import QShortcut
-from PyQt5.QtWidgets import QGroupBox
-from PyQt5.QtWidgets import QRadioButton
+from PyQt5.QtCore import Qt, QCoreApplication, pyqtSlot
+from PyQt5.QtWidgets import QFileDialog, QLabel, QPushButton, QMainWindow, QWidget, QVBoxLayout, \
+							QApplication, QShortcut, QGroupBox, QRadioButton
 from PyQt5.QtGui import QKeySequence
-from kitbash import (
-	SAMPLES_ABSPATH,
-	SAMPLES_RESOLVE,
-	SAMPLES_COPY,
-	SAMPLES_SYMLINK,
-	SAMPLES_HARDLINK
-)
+from kitbash import 		settings, \
+							SAMPLES_ABSPATH, SAMPLES_RESOLVE, SAMPLES_COPY, \
+							SAMPLES_SYMLINK, SAMPLES_HARDLINK
+
 
 class FileSaveDialog(QFileDialog):
-
-	samples_mode = SAMPLES_HARDLINK
 
 	def __init__(self, parent):
 		QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs)
@@ -57,56 +42,63 @@ class FileSaveDialog(QFileDialog):
 		lo.addWidget(self.r_symlink)
 		lo.addWidget(self.r_hardlink)
 		gb.setLayout(lo)
-		self.r_hardlink.setChecked(True)
+		self.samples_mode = int(settings().value("save_as_samples_mode", SAMPLES_HARDLINK))
+		if self.samples_mode == SAMPLES_ABSPATH:
+			self.r_abspath.setChecked(True)
+		elif self.samples_mode == SAMPLES_RESOLVE:
+			self.r_resolve.setChecked(True)
+		elif self.samples_mode == SAMPLES_COPY:
+			self.r_copy.setChecked(True)
+		elif self.samples_mode == SAMPLES_SYMLINK:
+			self.r_symlink.setChecked(True)
+		else:
+			self.r_hardlink.setChecked(True)
 		self.layout().addWidget(gb)
 
 	@pyqtSlot(int, bool)
 	def slot_set_mode(self, mode, state):
 		self.samples_mode = mode
 
+	def accept(self):
+		settings().setValue("save_as_samples_mode", self.samples_mode)
+		selected_files = self.selectedFiles()
+		self.selected_file = selected_files[0] if selected_files else None
+		super().accept()
+
 
 class TestWindow(QMainWindow):
 
 	def __init__(self):
 		super().__init__()
-		self.initUI()
 		self.quit_shortcut = QShortcut(QKeySequence('Esc'), self)
 		self.quit_shortcut.activated.connect(self.close)
-
-	def initUI(self):
 		central_widget = QWidget()
 		self.setCentralWidget(central_widget)
 		layout = QVBoxLayout()
-
 		self.label = QLabel("Selected path will be displayed here")
 		layout.addWidget(self.label)
 		self.mode_label = QLabel("Selected sample mode will be displayed here")
 		layout.addWidget(self.mode_label)
-
 		self.open_file_button = QPushButton("Open File Dialog")
 		self.open_file_button.clicked.connect(self.open_file_dialog)
 		layout.addWidget(self.open_file_button)
-
 		central_widget.setLayout(layout)
-
 		self.setWindowTitle("File Dialog Example")
-		self.show()
 
 	def open_file_dialog(self):
-		file_dialog = FileSaveDialog(self)
-		if file_dialog.exec_():
-			selected_files = file_dialog.selectedFiles()
-			if selected_files:
-				self.label.setText(f"Selected files: {', '.join(selected_files)}")
-				if file_dialog.samples_mode == SAMPLES_ABSPATH:
+		dlg = FileSaveDialog(self)
+		if dlg.exec_():
+			if dlg.selected_file:
+				self.label.setText(f"Selected file: {dlg.selected_file}")
+				if dlg.samples_mode == SAMPLES_ABSPATH:
 					self.mode_label.setText('Point to the originals (absolute)')
-				elif file_dialog.samples_mode == SAMPLES_RESOLVE:
+				elif dlg.samples_mode == SAMPLES_RESOLVE:
 					self.mode_label.setText('Point to the originals (relative)')
-				elif file_dialog.samples_mode == SAMPLES_COPY:
+				elif dlg.samples_mode == SAMPLES_COPY:
 					self.mode_label.setText('Copy the originals')
-				elif file_dialog.samples_mode == SAMPLES_SYMLINK:
+				elif dlg.samples_mode == SAMPLES_SYMLINK:
 					self.mode_label.setText('Create symlinks to the originals')
-				elif file_dialog.samples_mode == SAMPLES_HARDLINK:
+				elif dlg.samples_mode == SAMPLES_HARDLINK:
 					self.mode_label.setText('Hardlink the originals')
 			else:
 				self.label.setText("No files selected")
@@ -115,6 +107,7 @@ class TestWindow(QMainWindow):
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
 	ex = TestWindow()
+	ex.show()
 	sys.exit(app.exec_())
 
 

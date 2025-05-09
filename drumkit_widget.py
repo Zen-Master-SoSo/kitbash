@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, \
 from qt_extras import SigBlock
 from liquiphy import LiquidSFZ
 from kitbash import PACKAGE_DIR
-from kitbash.synth import Synth
+from kitbash.drumkit import Drumkit
 from kitbash.icons import (
 	ICON_EXPANDED,
 	ICON_HIDDEN,
@@ -25,21 +25,20 @@ from kitbash.icons import (
 
 
 class DrumkitWidget(QFrame):
+	"""
+	Graphical representation of a drumkit.
+	"""
 
 	sig_inst_toggle = pyqtSignal(QObject, str, bool, bool)
-	sig_synth_ready = pyqtSignal(QObject)
 	sig_remove_drumkit = pyqtSignal(QObject)
 
 	def __init__(self, filename, parent):
 		super().__init__(parent)
-		self.looper = parent.looper
-		self.filename = filename
-		self.moniker = basename(self.filename)
+		self.sfz_filename = filename
+		self.moniker = basename(self.sfz_filename)
 		self.drumkit = None
-
-		self.synth = Synth(self.moniker)
-		self.synth.sig_ports_ready.connect(self.slot_synth_ports_ready)
-		self.synth.load(self.filename)
+		self.synth = None
+		self.port_number = None
 
 		self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 		self.setFrameStyle(QFrame.Panel)
@@ -76,7 +75,7 @@ class DrumkitWidget(QFrame):
 		top_layout.addWidget(self.lbl_use_count)
 
 		label = QLabel(self)
-		label.setText(self.filename)
+		label.setText(self.sfz_filename)
 		top_layout.addWidget(label)
 
 		top_layout.addStretch(20)
@@ -100,20 +99,13 @@ class DrumkitWidget(QFrame):
 		main_layout.addWidget(self.frm_groups)
 		self.setLayout(main_layout)
 
-	@pyqtSlot()
-	def slot_synth_ports_ready(self):
-		"""
-		Received from Synth when all ports are registered.
-		Notifies MainWindow so the KitbashLooper can connect a new port to this
-		widget's synth.
-		"""
-		self.sig_synth_ready.emit(self)
-
-	def drumkit_loaded(self):
+	@pyqtSlot(Drumkit)
+	def slot_drumkit_loaded(self, drumkit):
 		"""
 		Called when KitLoader is finshed loading and interpreted SFZ.
-		KitLoader sets the "drumkit" attribute of this widget.
+		Fills the groups and instruments of this the DrumkitWidget.
 		"""
+		self.drumkit = drumkit
 		for group in self.drumkit.groups.values():
 			if group.empty():
 				continue
@@ -178,9 +170,7 @@ class DrumkitWidget(QFrame):
 		"""
 		use_count = len([ b for b in self.frm_groups.findChildren(InstrumentButton) if b.isChecked() ])
 		self.lbl_use_count.setText('(%d)' % use_count)
-		self.lbl_audio_indicator.setPixmap(
-			PIXMAP_AUDIO_ON() if bool(use_count) and not self.looper.bashed_exclusive \
-			else PIXMAP_AUDIO_OFF())
+		self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_ON() if bool(use_count) else PIXMAP_AUDIO_OFF())
 		font = self.lbl_use_count.font()
 		font.setBold(bool(use_count))
 		self.lbl_use_count.setFont(font)
@@ -266,6 +256,7 @@ class DrumkitWidget(QFrame):
 class TitleFrame(QFrame):
 	pass
 
+
 class GroupFrame(QFrame):
 	def __init__(self, group, parent):
 		super().__init__(parent)
@@ -280,8 +271,10 @@ class GroupFrame(QFrame):
 		self.group_button.setCheckable(True)
 		self.group_layout.addWidget(self.group_button)
 
+
 class GroupButton(QPushButton):
 	pass
+
 
 class InstrumentButton(QPushButton):
 	def __init__(self, inst, parent):
