@@ -261,7 +261,6 @@ class MainWindow(QMainWindow):
 			for port in self.conn_man.output_ports():
 				if port.is_midi and APPLICATION_NAME not in port.name:
 					self.cmb_midi_srcs.addItem(port.name)
-			logging.debug('Filling sources; current midi source: %s', self.current_midi_source)
 			if self.current_midi_source:
 				self.cmb_midi_srcs.setCurrentText(self.current_midi_source)
 
@@ -280,20 +279,20 @@ class MainWindow(QMainWindow):
 			self.conn_man.disconnect_by_name(self.current_midi_source, self.midi_splitter.input_port.name)
 			self.conn_man.disconnect_by_name(self.current_midi_source, self.synth.input_port.name)
 		self.current_midi_source = value
-		logging.debug('slot_midi_src_changed; current midi source: %s', self.current_midi_source)
 		if self.current_midi_source:
 			self.conn_man.connect_by_name(self.current_midi_source, self.midi_splitter.input_port.name)
 			self.conn_man.connect_by_name(self.current_midi_source, self.synth.input_port.name)
 
 	@pyqtSlot(str)
 	def slot_audio_sink_changed(self, value):
-		my_client_names = [ self.synth.client_name ] if self.synth else []
-		for drumkit_widget in self.drumkit_widgets:
-			my_client_names.append(drumkit_widget.client_name)
 		if self.current_audio_sink:
+			liquid_client_names = [ self.synth.client_name ] if self.synth else []
+			for drumkit_widget in self.drumkit_widgets:
+				if drumkit_widget.synth and drumkit_widget.synth.client_name:
+					liquid_client_names.append(drumkit_widget.synth.client_name)
 			for audio_sink_port in self.audio_sink_ports:
 				for src_port in self.conn_man.get_port_connections(audio_sink_port):
-					if src_port.client_name in my_client_names:
+					if src_port.client_name in liquid_client_names:
 						self.conn_man.disconnect(src_port, audio_sink_port)
 		self.current_audio_sink = value
 		if self.current_audio_sink:
@@ -362,7 +361,6 @@ class MainWindow(QMainWindow):
 	def slot_ports_complete(self):
 		associated_object = self.synth_creation_queue.popleft()
 		associated_object.synth = self.new_synth
-		logging.debug('Assigned %s to %s', self.new_synth.client_name, associated_object)
 		if len(self.synth_creation_queue):
 			self.start_new_synth()
 		else:
@@ -371,7 +369,6 @@ class MainWindow(QMainWindow):
 		if isinstance(associated_object, DrumkitWidget):
 			src = self.midi_splitter.output_ports[associated_object.port_number].name
 			tgt = associated_object.synth.input_port.name
-			logging.debug('Connecting %s to %s', src, tgt)
 			self.conn_man.connect_by_name(src, tgt)
 		else:
 			self.connect_midi_source(associated_object.synth)
