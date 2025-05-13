@@ -433,12 +433,14 @@ class MainWindow(QMainWindow):
 			"ctrl_state": (bool) True if CTRL key pressed when clicking
 		"""
 		# Deselect all other InstrumentButton if not CTRL key pressed:
-		if state and not ctrl_state:
-			for drumkit_widget in self.drumkit_widgets:
-				if not drumkit_widget is source_widget:
-					drumkit_widget.deselect_instrument(inst_id)
+		if state:
+			if not ctrl_state:
+				for drumkit_widget in self.drumkit_widgets:
+					if not drumkit_widget is source_widget:
+						drumkit_widget.deselect_instrument(inst_id)
+			source_widget.reselect_parent_group(inst_id)
 		# Deselect the GroupButton if instrument deselected:
-		elif not state:
+		else:
 			source_widget.deselect_parent_group(inst_id)
 		# Enable/disable routing midi events to the source_widget's synth:
 		if state:

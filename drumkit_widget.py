@@ -8,8 +8,8 @@ from functools import partial
 
 from PyQt5.QtCore import Qt, QObject, pyqtSignal, pyqtSlot, QSize
 from PyQt5.QtGui import QIcon, QPixmap
-from PyQt5.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, \
-							QLabel, QFrame, QSizePolicy, QPushButton
+from PyQt5.QtWidgets import QApplication, QLayout, QVBoxLayout, QHBoxLayout, \
+							QLabel, QFrame, QSizePolicy, QPushButton, QCheckBox
 
 from qt_extras import SigBlock
 from liquiphy import LiquidSFZ
@@ -40,17 +40,18 @@ class DrumkitWidget(QFrame):
 		self.synth = None
 		self.port_number = None
 
-		self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
+		self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
 		self.setFrameStyle(QFrame.Panel)
 		self.setFrameShadow(QFrame.Sunken)
 		self.setObjectName('drumkit_widget')
 
 		main_layout = QVBoxLayout()
-		main_layout.setContentsMargins(2,2,2,2)
+		main_layout.setContentsMargins(1,1,1,1)
 		main_layout.setSpacing(0)
 
-		frm_title = TitleFrame()
+		frm_title = QFrame()
 		frm_title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+		frm_title.setObjectName('frm_title')
 
 		top_layout = QHBoxLayout()
 		top_layout.setContentsMargins(2,2,2,2)
@@ -71,7 +72,6 @@ class DrumkitWidget(QFrame):
 
 		self.lbl_use_count = QLabel(self)
 		self.lbl_use_count.setText('(0)')
-		self.lbl_use_count.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 		top_layout.addWidget(self.lbl_use_count)
 
 		label = QLabel(self)
@@ -91,8 +91,9 @@ class DrumkitWidget(QFrame):
 		main_layout.addWidget(frm_title)
 
 		self.frm_groups = QFrame(self)
+		self.frm_groups.setObjectName('frm_groups')
 		self.groups = QHBoxLayout()
-		self.groups.setContentsMargins(2,2,2,2)
+		self.groups.setContentsMargins(1,1,1,1)
 		self.groups.setSpacing(0)
 
 		self.frm_groups.setLayout(self.groups)
@@ -118,6 +119,7 @@ class DrumkitWidget(QFrame):
 				group_frame.group_layout.addWidget(inst_button)
 			group_frame.group_layout.addStretch()
 			self.groups.addWidget(group_frame)
+		self.groups.addStretch()
 
 	@pyqtSlot(QFrame)
 	def group_clicked(self, group_frame):
@@ -182,22 +184,38 @@ class DrumkitWidget(QFrame):
 		"""
 		return QApplication.keyboardModifiers() == Qt.ControlModifier
 
+	def inst_button(self, inst_id):
+		"""
+		Returns the instrument button identified by the given inst_id.
+		"""
+		return self.findChild(InstrumentButton, inst_id)
+
 	def deselect_parent_group(self, inst_id):
 		"""
 		Called whenever an InstrumentButton is deselected.
+		The parent group button is deselected.
 		"""
-		inst_button = self.findChild(InstrumentButton, inst_id)
+		inst_button = self.inst_button(inst_id)
 		inst_button.parentWidget().findChild(GroupButton).setChecked(False)
+
+	def reselect_parent_group(self, inst_id):
+		"""
+		Called whenever an InstrumentButton is selected.
+		The parent group button is selected if all of its' InstrumentButtons are
+		selected.
+		"""
+		group = self.inst_button(inst_id).parentWidget()
+		if all(inst_button.isChecked() for inst_button in group.findChildren(InstrumentButton)):
+			group.findChild(GroupButton).setChecked(True)
 
 	def deselect_instrument(self, inst_id):
 		"""
 		Called from MainWindow when a button with the same inst_id is selected
 		exclusively (not CTRL key pressed).
 		"""
-		button = self.findChild(InstrumentButton, inst_id)
+		button = self.inst_button(inst_id)
 		if button:	# May not exist, as not all Drumkits use the same instruments
 			button.setChecked(False)
-			button.parentWidget().findChild(GroupButton).setChecked(False)
 			self.update_count()
 
 	def selected_instrument_ids(self):
@@ -253,10 +271,6 @@ class DrumkitWidget(QFrame):
 		return f"<DrumkitWidget {self.moniker}>"
 
 
-class TitleFrame(QFrame):
-	pass
-
-
 class GroupFrame(QFrame):
 	def __init__(self, group, parent):
 		super().__init__(parent)
@@ -264,25 +278,79 @@ class GroupFrame(QFrame):
 		self.setObjectName(group.group_id)	# GroupFrame identified by group_id
 		self.group_layout = QVBoxLayout()
 		self.group_layout.setSpacing(0)
-		self.group_layout.setContentsMargins(1,1,1,1)
+		self.group_layout.setContentsMargins(0,0,0,0)
 		self.setLayout(self.group_layout)
 		self.group_button = GroupButton(self)		# GroupButton has no unique object name
+		self.group_button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 		self.group_button.setText(group.name)
 		self.group_button.setCheckable(True)
 		self.group_layout.addWidget(self.group_button)
 
 
 class GroupButton(QPushButton):
-	pass
+	"""
+	Defined here to provide a distinct .css class name.
+	"""
 
 
 class InstrumentButton(QPushButton):
+
+	sig_mouse_press = pyqtSignal(int)
+
 	def __init__(self, inst, parent):
 		super().__init__(parent)
+		self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
+		lo = QHBoxLayout()
+		lo.setContentsMargins(0,0,0,0)
+		lo.setSpacing(0)
+		lo.setSizeConstraint(QLayout.SetMinimumSize)
+		self.setLayout(lo)
 		self.inst_id = inst.inst_id
-		self.setText(inst.name)
 		self.setCheckable(True)
 		self.setObjectName(inst.inst_id)	# InstrumentButton identified by inst_id
+		lo.addWidget(InstrumentLabel(inst, self))
+		lo.addStretch()
+		self.checkbox = QCheckBox(self)
+		self.checkbox.stateChanged.connect(self.slot_checkbox_state_change)
+		lo.addWidget(self.checkbox)
 
+	@pyqtSlot(int)
+	def slot_checkbox_state_change(self, state):
+		self.setChecked(state == Qt.Checked)
+
+	def checkStateSet(self):
+		with SigBlock(self.checkbox):
+			self.checkbox.setChecked(self.isChecked())
+
+	def mousePressEvent(self, event):
+		event.accept()
+		self.mouse_press()
+
+	def mouseReleaseEvent(self, event):
+		event.accept()
+		self.mouse_release()
+
+	def mouse_press(self):
+		self.setDown(True)
+		self.sig_mouse_press.emit(self.inst_id)
+
+	def mouse_release(self):
+		self.setDown(False)
+
+
+class InstrumentLabel(QLabel):
+
+	def __init__(self, inst, parent):
+		super().__init__(parent)
+		self.setText(inst.name)
+		self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
+
+	def mousePressEvent(self, event):
+		self.parent().mouse_press()
+		event.accept()
+
+	def mouseReleaseEvent(self, event):
+		self.parent().mouse_release()
+		event.accept()
 
 #  end kitbash/drumkit_widget.py
