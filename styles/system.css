@@ -37,7 +37,7 @@ DrumkitWidget GroupButton:checked {
 }
 
 DrumkitWidget InstrumentButton {
-	background: #ABBDA4;
+	background: #BCC4B9;
 }
 
 DrumkitWidget InstrumentButton:checked {
@@ -50,7 +50,7 @@ DrumkitWidget InstrumentButton:pressed {
 
 DrumkitWidget InstrumentButton QLabel {
 	font-size: 8.5pt;
-	padding: 1px 2px;
+	padding: 1px 4px 1px 3px;
 }
 
 DrumkitWidget InstrumentButton QCheckBox {

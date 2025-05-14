@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import QApplication, QLayout, QVBoxLayout, QHBoxLayout, \
 from qt_extras import SigBlock
 from liquiphy import LiquidSFZ
 from kitbash import PACKAGE_DIR
-from kitbash.drumkit import Drumkit
+from kitbash.drumkit import Drumkit, PercussionInstrument
 from kitbash.icons import (
 	ICON_EXPANDED,
 	ICON_HIDDEN,
@@ -116,6 +116,8 @@ class DrumkitWidget(QFrame):
 			for inst in group.instruments.values():
 				inst_button = InstrumentButton(inst, group_frame)
 				inst_button.toggled.connect(partial(self.instrument_toggled, inst_button))
+				inst_button.sig_mouse_press.connect(self.instrument_pressed)
+				inst_button.sig_mouse_release.connect(self.instrument_released)
 				group_frame.group_layout.addWidget(inst_button)
 			group_frame.group_layout.addStretch()
 			self.groups.addWidget(group_frame)
@@ -132,6 +134,14 @@ class DrumkitWidget(QFrame):
 		group_button = group_frame.findChild(GroupButton)
 		for inst_button in group_frame.findChildren(InstrumentButton):
 			inst_button.setChecked(group_button.isChecked())
+
+	@pyqtSlot(PercussionInstrument)
+	def instrument_pressed(self, inst):
+		self.synth.noteon(0, inst.pitch, 120)
+
+	@pyqtSlot(PercussionInstrument)
+	def instrument_released(self, inst):
+		self.synth.noteoff(0, inst.pitch)
 
 	@pyqtSlot(QPushButton)
 	def instrument_toggled(self, button):
@@ -272,6 +282,10 @@ class DrumkitWidget(QFrame):
 
 
 class GroupFrame(QFrame):
+	"""
+	QFrame which contains one GroupButton and one or more InstrumentButton
+	"""
+
 	def __init__(self, group, parent):
 		super().__init__(parent)
 		self.setFrameShape(QFrame.NoFrame)
@@ -295,19 +309,20 @@ class GroupButton(QPushButton):
 
 class InstrumentButton(QPushButton):
 
-	sig_mouse_press = pyqtSignal(int)
+	sig_mouse_press = pyqtSignal(PercussionInstrument)
+	sig_mouse_release = pyqtSignal(PercussionInstrument)
 
 	def __init__(self, inst, parent):
 		super().__init__(parent)
+		self.inst = inst
+		self.setObjectName(inst.inst_id)
 		self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
 		lo = QHBoxLayout()
 		lo.setContentsMargins(0,0,0,0)
 		lo.setSpacing(0)
 		lo.setSizeConstraint(QLayout.SetMinimumSize)
 		self.setLayout(lo)
-		self.inst_id = inst.inst_id
 		self.setCheckable(True)
-		self.setObjectName(inst.inst_id)	# InstrumentButton identified by inst_id
 		lo.addWidget(InstrumentLabel(inst, self))
 		lo.addStretch()
 		self.checkbox = QCheckBox(self)
@@ -316,26 +331,48 @@ class InstrumentButton(QPushButton):
 
 	@pyqtSlot(int)
 	def slot_checkbox_state_change(self, state):
+		"""
+		Triggered when contained checkbox is clicked.
+		"""
 		self.setChecked(state == Qt.Checked)
 
 	def checkStateSet(self):
+		"""
+		Extends QAbstractButton.checkStateSet.
+		This is called in response to the gui setting the "checked" property of this QPushButton.
+		"""
 		with SigBlock(self.checkbox):
 			self.checkbox.setChecked(self.isChecked())
 
 	def mousePressEvent(self, event):
+		"""
+		Overrides mouse so that only the contained checkbox will toggle this widget's state.
+		"""
 		event.accept()
 		self.mouse_press()
 
 	def mouseReleaseEvent(self, event):
+		"""
+		Overrides mouse so that only the contained checkbox will toggle this widget's state.
+		"""
 		event.accept()
 		self.mouse_release()
 
 	def mouse_press(self):
+		"""
+		Called from contained label. Sets the "down" state of this widget,
+		(which is identified in the CSS as the ":pressed" pseudo-selector).
+		"""
 		self.setDown(True)
-		self.sig_mouse_press.emit(self.inst_id)
+		self.sig_mouse_press.emit(self.inst)
 
 	def mouse_release(self):
+		"""
+		Called from contained label. Unsets the "down" state of this widget,
+		(which is identified in the CSS as the ":pressed" pseudo-selector).
+		"""
 		self.setDown(False)
+		self.sig_mouse_release.emit(self.inst)
 
 
 class InstrumentLabel(QLabel):
