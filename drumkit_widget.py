@@ -150,7 +150,8 @@ class DrumkitWidget(QFrame):
 		"inst_id" is a string key, enumerated in the DrumkitClass.
 		"button" is the InstrumentButton which was toggled.
 		"""
-		self.sig_inst_toggle.emit(self, button.inst_id, button.isChecked(), self.ctrl_pressed())
+		self.sig_inst_toggle.emit(self, button.inst.inst_id,
+			button.isChecked(), self.ctrl_pressed())
 		self.update_count()
 
 	@pyqtSlot()
@@ -232,7 +233,7 @@ class DrumkitWidget(QFrame):
 		"""
 		Returns a list of instrument ids from selected instrument buttons.
 		"""
-		return [ button.inst_id \
+		return [ button.inst.inst_id \
 				for button in self.findChildren(InstrumentButton) \
 				if button.isChecked() ]
 
