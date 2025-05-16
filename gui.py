@@ -4,7 +4,6 @@
 #
 import sys, os, argparse, logging, json, glob
 from collections import deque
-from tempfile import mkstemp
 from functools import partial
 from signal import signal, SIGINT, SIGTERM
 from recent_items_list import RecentItemsList
@@ -22,13 +21,13 @@ from PyQt5.QtCore import	Qt, pyqtSignal, pyqtSlot, QObject, QTimer, \
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog, \
 							QAction, QActionGroup, QMenu, QLabel, QVBoxLayout, \
 							QGroupBox, QRadioButton
+from PyQt5.QtGui import		QIcon
 
 from kitbash import settings, APPLICATION_NAME, PACKAGE_DIR, \
 					SAMPLES_RESOLVE, SAMPLES_COPY, SAMPLES_SYMLINK, \
 					SAMPLES_HARDLINK, SAMPLES_ABSPATH
 from kitbash.drumkit import Drumkit
 from kitbash.drumkit_widget import DrumkitWidget
-from kitbash.icons import PIXMAP_AUDIO_OFF, PIXMAP_AUDIO_ON
 
 
 class MainWindow(QMainWindow):
@@ -50,19 +49,19 @@ class MainWindow(QMainWindow):
 		with ShutUpQT():
 			uic.loadUi(os.path.join(PACKAGE_DIR, 'res', 'main_window.ui'), self)
 		#self.setWindowIcon(QIcon(os.path.join(PACKAGE_DIR, 'res', 'icon.png')))
-		geometry = settings().value("geometry")
+		geometry = settings().value("geometry/MainWindow", None)
 		if geometry is not None:
 			self.restoreGeometry(geometry)
 		self.recent_projects = RecentItemsList(settings().value("recent_projects", defaultValue=[]))
 		self.recent_drumkits = RecentItemsList(settings().value("recent_drumkits", defaultValue=[]))
-		self.sfz_filename = None
-		self.project_file = None
+		self.project_filename = None
 		self.project_definition = None
-		self.project_clearing = False
 		self.project_loading = False
-		self.bashed_kit = None
-		self.saved_sfz_filename = None
 		self.dirty = False
+		self.sfz_filename = None
+		self.bashed_kit = None
+		self.bashed_sfz_filename = None
+		self.bashed_sfz_samples_mode = None
 		self.synth = None
 		self.drumkit_port_ranges = set( port_number for port_number in range(16) )
 		self.synth_creation_queue = deque()
@@ -98,14 +97,10 @@ class MainWindow(QMainWindow):
 		# Setup signals
 		signal(SIGINT, self.system_signal)
 		signal(SIGTERM, self.system_signal)
-		# Allow Qt event loop to process layout ...
-		QTimer.singleShot(0, self.layout_complete)
-
-	def layout_complete(self):
+		self.set_dirty(False)
 		self.instantiate_synth(self)
 
 	def setup_window_elements(self):
-		self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
 		self.drumkit_widgets = VListLayout(end_space = 10)
 		self.drumkit_widgets.setContentsMargins(0,0,0,0)
 		self.drumkit_widgets.setSpacing(2)
@@ -113,8 +108,6 @@ class MainWindow(QMainWindow):
 
 	def connect_actions(self):
 		self.action_collapse_kits.triggered.connect(self.slot_collapse_kits)
-		self.action_collapse_kits.setEnabled(False)
-		self.action_collapse_kits.setChecked(False)
 		self.action_new_project.triggered.connect(self.slot_new_project)
 		self.action_open_project.triggered.connect(self.slot_open_project)
 		self.action_save_project.triggered.connect(self.slot_save_project)
@@ -127,6 +120,19 @@ class MainWindow(QMainWindow):
 		self.kits_area.customContextMenuRequested.connect(self.slot_kits_context_menu)
 		self.b_preview.toggled.connect(self.slot_preview_toggle)
 		self.b_xruns.clicked.connect(self.slot_xruns_clicked)
+
+	def update_ui(self):
+		title = APPLICATION_NAME \
+			if self.project_filename is None \
+			else f"{self.project_filename} [{APPLICATION_NAME}]"
+		self.setWindowTitle("* " + title if self.dirty else title)
+		has_kits = bool(len(self.drumkit_widgets))
+		self.action_collapse_kits.setEnabled(has_kits)
+		self.action_collapse_kits.setChecked(has_kits)
+		self.action_new_project.setEnabled(has_kits)
+		self.action_save_project.setEnabled(has_kits and self.dirty)
+		self.action_save_bashed_kit.setEnabled(has_kits)
+		self.b_save_kit.setEnabled(has_kits)
 
 	# -----------------------------------------------------------------
 	# Style functions:
@@ -169,12 +175,8 @@ class MainWindow(QMainWindow):
 	# Project loading / saving:
 
 	def set_dirty(self, state = True):
-		if not self.project_loading:
-			self.dirty = state
-			title = APPLICATION_NAME \
-				if self.project_file is None \
-				else f"{self.project_file} [{APPLICATION_NAME}]"
-			self.setWindowTitle("* " + title if self.dirty else title)
+		self.dirty = state
+		self.update_ui()
 
 	def compile_project_def(self):
 		return {
@@ -182,66 +184,73 @@ class MainWindow(QMainWindow):
 			for widget in self.drumkit_widgets
 		}
 
+	def load_recent_project(self, filename):
+		if self.permission_to_clear():
+			self.load_project(filename)
+
 	def load_project(self, filename):
+		"""
+		Called internally - NOT FROM GUI SIGNALS.
+		Starts project load; saves recent file name.
+		Permission to clear must already have been given.
+		"""
 		if os.path.exists(filename):
-			logging.debug('LOADING PROJECT "%s"', filename)
-			self.project_file = filename
-			if self.is_clear():
-				self.execute_project_load()
+			try:
+				with open(filename, 'r') as fh:
+					self.project_definition = json.load(fh)
+			except json.JSONDecodeError as e:
+				DevilBox('There was a problem decoding:\n' +
+					f'"{filename}"\n' + \
+					f'"{e}"\n' + \
+					'Are you sure it is a kitbash project?')
 			else:
-				self.project_clearing = True
-				self.clear()
+				if len(self.drumkit_widgets):
+					self.clear()
+				self.project_filename = filename
+				self.register_recent_project()
+				self.project_loading = True
+				for filename in self.project_definition.keys():
+					self.load_drumkit(filename)
 		else:
 			self.recent_projects.remove(filename)
 			settings().setValue("recent_projects", self.recent_projects.items)
 			DevilBox(f"Project not found: {filename}")
 
 	def save_project(self):
-		with open(self.project_file, 'w') as fh:
+		with open(self.project_filename, 'w') as fh:
 			json.dump(self.compile_project_def(), fh, indent="\t")
 		self.register_recent_project()
 		self.set_dirty(False)
 
 	def register_recent_project(self):
-		self.recent_projects.select(self.project_file)
-		settings().setValue("recent_project_folder", os.path.dirname(self.project_file))
+		self.recent_projects.select(self.project_filename)
+		settings().setValue("recent_project_folder", os.path.dirname(self.project_filename))
 		settings().setValue("recent_projects", self.recent_projects.items)
 
-	def is_clear(self):
-		return len(self.drumkit_widgets) == 0
-
 	def permission_to_clear(self):
-		if self.is_clear():
+		if not self.dirty:
 			return True
 		dlg = QMessageBox(
 			QMessageBox.Warning,
-			"Verify clear all",
-			"Are you sure you want to remove everything and start new?",
-			QMessageBox.Ok | QMessageBox.Cancel,
+			"Save changes?",
+			"There are changes to the current project.\nDo you want to save changes?",
+			QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
 			self
 		)
-		return dlg.exec() == QMessageBox.Ok
+		ret = dlg.exec()
+		if ret == QMessageBox.Save:
+			self.slot_save_project()
+			return True
+		elif ret == QMessageBox.Cancel:
+			return False
+		else:
+			return True
 
 	def clear(self):
-		logging.debug('CLEARING')
+		self.project_filename = None
 		for widget in reversed(self.drumkit_widgets):
 			self.slot_remove_drumkit(widget)
-
-	def execute_project_load(self):
-		self.project_clearing = False
-		self.project_loading = True
-		try:
-			with open(self.project_file, 'r') as fh:
-				self.project_definition = json.load(fh)
-		except json.JSONDecodeError as e:
-			DevilBox('There was a problem decoding:\n' +
-				f'"{self.project_file}"\n' + \
-				f'"{e}"\n' + \
-				'Are you sure it is a kitbash project?')
-		else:
-			self.register_recent_project()
-			for filename in self.project_definition.keys():
-				self.load_drumkit(filename)
+		self.set_dirty(False)
 
 	def check_project_load_complete(self):
 		"""
@@ -397,7 +406,6 @@ class MainWindow(QMainWindow):
 			self.background_threadpool.start(worker)
 			self.recent_drumkits.select(filename)
 			settings().setValue("recent_drumkit_folder", os.path.dirname(filename))
-			self.set_dirty()
 		else:
 			self.recent_drumkits.remove(filename)
 			DevilBox(f"File not found: {filename}")
@@ -409,13 +417,14 @@ class MainWindow(QMainWindow):
 		Called when KitLoader is finshed loading and interpreted SFZ.
 		"""
 		self.action_collapse_kits.setEnabled(True)
-		if self.project_loading and drumkit_widget.port_number:
+		if self.project_loading:
 			drumkit_widget.apply_selections(self.project_definition[drumkit_widget.sfz_filename])
 			self.check_project_load_complete()
-		elif len(self.drumkit_widgets) == 1:
-			drumkit_widget.select_all()
-			self.midi_splitter.assign_all_notes(drumkit_widget.port_number)
-			self.b_preview.setEnabled(True)
+		else:
+			if len(self.drumkit_widgets) == 1:
+				drumkit_widget.select_all()
+				self.midi_splitter.assign_all_notes(drumkit_widget.port_number)
+			self.set_dirty()
 
 	@pyqtSlot(QObject)
 	def slot_remove_drumkit(self, drumkit_widget):
@@ -454,7 +463,6 @@ class MainWindow(QMainWindow):
 			self.midi_splitter.clear_note_assignment(
 				MIDI_DRUM_PITCHES[inst_id],
 				source_widget.port_number)
-		self.b_preview.setEnabled(any(self.midi_splitter.note_assignments.values()))
 		self.set_dirty()
 
 	@pyqtSlot(bool)
@@ -463,31 +471,24 @@ class MainWindow(QMainWindow):
 		Select bashed sfz for play preview; deselect all drumkits.
 		"""
 		self.midi_splitter.bypassed = state
-		if state:
-			# Going from no preview to preview state:
-			logging.debug('Bashing current kits')
-			if self.sfz_filename:
-				os.unlink(self.sfz_filename)
-			worker = KitBasher(self.drumkit_widgets)
-			worker.signals.sig_bashed.connect(self.slot_drumkit_bashed)
-			self.background_threadpool.start(worker)
-		self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_ON() if state else PIXMAP_AUDIO_OFF())
+		self.b_preview.setIcon(QIcon.fromTheme('audio-volume-high' \
+			if state else 'audio-volume-muted'))
 
-	@pyqtSlot(str)
-	def slot_drumkit_bashed(self, filename):
+	@pyqtSlot(Drumkit)
+	def slot_drumkit_bashed(self, bashed_kit):
 		"""
 		Triggered from KitBasher signal when bashing is finished.
 		"""
-		self.sfz_filename = filename
-		self.synth.load(self.sfz_filename)
-		logging.debug('Loaded .sfz at %s', self.sfz_filename)
-
-	@pyqtSlot()
-	def slot_save_bashed_kit(self):
-		dlg = FileSaveDialog(self)
-		if dlg.exec_() and dlg.selected_file:
-			self.bashed_kit.save_as(dlg.selected_file, dlg.samples_mode)
-			self.saved_sfz_filename = dlg.selected_file
+		self.bashed_kit = bashed_kit
+		try:
+			bashed_kit.save_as(self.bashed_sfz_filename, self.bashed_sfz_samples_mode)
+			self.synth.load(self.bashed_sfz_filename)
+			logging.debug('Loaded bashed .sfz at %s', self.bashed_sfz_filename)
+			self.b_preview.setEnabled(True)
+		except OSError as e:
+			DevilBox('Hardlinks between devices are not allowed.\n' +\
+				'Choose a different path or sample mode.' if e.errno == 18 \
+				else str(e))
 
 	def used_port_numbers(self):
 		"""
@@ -504,21 +505,16 @@ class MainWindow(QMainWindow):
 		return self.drumkit_port_ranges ^ self.used_port_numbers()
 
 	# -----------------------------------------------------------------
-	# QMainWindow overloads (see also: "timerEvent")
+	# Quit / close / signals
 
 	def closeEvent(self, event):
 		logging.debug('MainWindow close()')
 		self.synth.quit()
 		for drumkit_widget in self.drumkit_widgets:
 			drumkit_widget.synth.quit()
-		if self.sfz_filename and os.path.exists(self.sfz_filename):
-			os.unlink(self.sfz_filename)
-		settings().setValue("geometry", self.saveGeometry())
+		settings().setValue("geometry/MainWindow", self.saveGeometry())
 		logging.debug('Total %d xruns', self.current_xruns)
 		event.accept()
-
-	# -----------------------------------------------------------------
-	# System signal handler
 
 	def system_signal(self, *_):
 		logging.debug('Caught signal - shutting down')
@@ -585,7 +581,7 @@ class MainWindow(QMainWindow):
 		actions = []
 		for filename in self.recent_projects:
 			action = QAction(filename, self)
-			action.triggered.connect(partial(self.load_project, filename))
+			action.triggered.connect(partial(self.load_recent_project, filename))
 			actions.append(action)
 		self.menu_RecentProject.addActions(actions)
 
@@ -596,39 +592,53 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def slot_open_project(self):
-		if not self.permission_to_clear():
-			return
-		filename = QFileDialog.getOpenFileName(self,
-			"Open saved project",
-			settings().value("recent_project_folder", ""),
-			"Kitbash project (*.json)"
-		)[0]
-		if filename != "":
-			self.load_project(filename)
+		if self.permission_to_clear():
+			QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, False)
+			filename = QFileDialog.getOpenFileName(self,
+				"Open saved project",
+				settings().value("recent_project_folder", ""),
+				"Kitbash project (*.json)"
+			)[0]
+			if filename != '':
+				self.load_project(filename)
 
 	@pyqtSlot()
 	def slot_save_project(self):
-		if self.project_file is None:
+		if self.project_filename is None:
+			QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, False)
 			filename, _ = QFileDialog.getSaveFileName(
 				self,
 				"Save Kitbash project ...",
 				"kitbash.json",
 				"Kitbash project (*.json)"
 			)
-			if filename:
-				self.project_file = filename
-			else:
+			if filename == '':
 				return
+			self.project_filename = filename
 		self.save_project()
 
 	@pyqtSlot()
+	def slot_save_bashed_kit(self):
+		"""
+		See also: slot_drumkit_bashed
+		"""
+		dlg = FileSaveDialog(self)
+		if dlg.exec_() and dlg.selected_file:
+			self.bashed_sfz_filename = dlg.selected_file
+			self.bashed_sfz_samples_mode = dlg.samples_mode
+			worker = KitBasher(self.drumkit_widgets)
+			worker.signals.sig_bashed.connect(self.slot_drumkit_bashed)
+			self.background_threadpool.start(worker)
+
+	@pyqtSlot()
 	def slot_load_kit(self):
+		QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, False)
 		filename = QFileDialog.getOpenFileName(self,
-			"Load SFZ Drumkit",
-			settings().value("recent_drumkit_folder", ""),
+			"Load Drumkit",
+			settings().value("recent_drumkit_folder", ''),
 			"SFZ file (*.sfz)"
 		)[0]
-		if filename != "":
+		if filename != '':
 			self.load_drumkit(filename)
 
 
@@ -636,7 +646,7 @@ class KitWorkerSignals(QObject):
 
 	sig_loaded = pyqtSignal(Drumkit)
 	sig_widget_loaded = pyqtSignal(DrumkitWidget, Drumkit)
-	sig_bashed = pyqtSignal(str)
+	sig_bashed = pyqtSignal(Drumkit)
 
 
 class KitLoader(QRunnable):
@@ -667,9 +677,7 @@ class KitBasher(QRunnable):
 		for drumkit_widget in self.drumkit_widgets:
 			for inst_id in drumkit_widget.selected_instrument_ids():
 				bashed_kit.import_instrument(inst_id, drumkit_widget.drumkit)
-		_, sfz_filename = mkstemp(prefix = APPLICATION_NAME, suffix = '.sfz', text = True)
-		bashed_kit.save_as(sfz_filename, SAMPLES_ABSPATH)
-		logging.debug('Created .sfz at %s', sfz_filename)
+		self.signals.sig_bashed.emit(bashed_kit)
 
 
 class JackLiquidSFZ(LiquidSFZ):
@@ -686,6 +694,9 @@ class FileSaveDialog(QFileDialog):
 	def __init__(self, parent):
 		QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs)
 		super().__init__(parent)
+		geometry = settings().value("geometry/FileSaveDialog", None)
+		if geometry is not None:
+			self.restoreGeometry(geometry)
 		self.setWindowTitle("Save as .sfz")
 		self.setFileMode(QFileDialog.AnyFile)
 		self.setViewMode(QFileDialog.List)
@@ -735,6 +746,10 @@ class FileSaveDialog(QFileDialog):
 		self.selected_file = selected_files[0] if selected_files else None
 		super().accept()
 
+	def done(self, result):
+		print('FileSaveDialog done')
+		settings().setValue("geometry/FileSaveDialog", self.saveGeometry())
+		super().done(result)
 
 # -----------------------------------------------------------------
 # main()

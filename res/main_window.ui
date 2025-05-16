@@ -61,6 +61,32 @@
           </widget>
          </item>
          <item>
+          <widget class="QPushButton" name="b_save_kit">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset theme="document-save"/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="b_preview">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset theme="audio-volume-muted"/>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QLabel" name="lbl_audio_indicator">
            <property name="minimumSize">
             <size>
@@ -76,19 +102,6 @@
            </property>
            <property name="alignment">
             <set>Qt::AlignCenter</set>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="b_preview">
-           <property name="enabled">
-            <bool>false</bool>
-           </property>
-           <property name="text">
-            <string>Preview</string>
-           </property>
-           <property name="checkable">
-            <bool>true</bool>
            </property>
           </widget>
          </item>
@@ -245,7 +258,7 @@
   </widget>
   <action name="action_load_kit">
    <property name="text">
-    <string>Load SFZ Drum&amp;Kit</string>
+    <string>Load Drum&amp;Kit</string>
    </property>
    <property name="toolTip">
     <string>Load an SFZ drumkit</string>
@@ -344,6 +357,22 @@
     <hint type="destinationlabel">
      <x>482</x>
      <y>227</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>b_save_kit</sender>
+   <signal>clicked()</signal>
+   <receiver>action_save_bashed_kit</receiver>
+   <slot>trigger()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>111</x>
+     <y>38</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
     </hint>
    </hints>
   </connection>

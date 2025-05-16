@@ -253,7 +253,7 @@ class DrumkitWidget(QFrame):
 			group_frame.group_id : {
 				'group' 		: group_frame.findChild(GroupButton).isChecked(),
 				'instruments'	: {
-					inst_button.inst_id : inst_button.isChecked() \
+					inst_button.inst.inst_id : inst_button.isChecked() \
 					for inst_button in group_frame.findChildren(InstrumentButton)
 				}
 			}
@@ -271,10 +271,10 @@ class DrumkitWidget(QFrame):
 				with SigBlock(group_button):
 					group_button.setChecked(sel['group'])
 				for inst_button in group_frame.findChildren(InstrumentButton):
-					if inst_button.inst_id in sel['instruments']:
-						inst_button.setChecked(sel['instruments'][inst_button.inst_id])
+					if inst_button.inst.inst_id in sel['instruments']:
+						inst_button.setChecked(sel['instruments'][inst_button.inst.inst_id])
 					else:
-						logging.warning('Button "%s" not found in project def', inst_button.inst_id)
+						logging.warning('Button "%s" not found in project def', inst_button.inst.inst_id)
 			else:
 				logging.warning('Group "%s" not found in project def', group_frame.group_id)
 

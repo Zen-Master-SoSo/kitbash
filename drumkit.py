@@ -8,7 +8,6 @@ Provides percussion group / instrument oriented wrapper for SFZ classes.
 Notes:
 When importing
 """
-import logging
 from os import path
 from os import mkdir
 from copy import deepcopy
@@ -366,7 +365,7 @@ class Drumkit:
 				sample.use_abspath()
 		elif samples_mode == SAMPLES_RESOLVE:
 			for sample in self.samples():
-				sample.resolve_to(target_dir)
+				sample.resolve_from(target_dir)
 		else:
 			target_sample_dir = path.join(target_dir, 'samples')
 			try:
@@ -418,17 +417,16 @@ class Drumkit:
 		pitch:		(int)		MIDI note number of the instrument to copy.
 		source_kit	(Drumkit)	Source to copy from
 		"""
-		logging.debug('Importing instrument %s', arg)
-		pitch, _ = self.instrument_selection_criteria(arg)
-		self.groups[self.pitch_groups[pitch]].instruments[pitch] = \
+		pitch, _ = self.instrument_selection_arg(arg)
+		group_id = self.pitch_groups[pitch]
+		self.groups[group_id].instruments[pitch] = \
 			deepcopy(source_kit.instrument(pitch))
 
 	def delete_instrument(self, arg):
 		"""
 		Removes an instrument - quicker than reimporting everything when changes are made.
 		"""
-		logging.debug('Deleting instrument %s', arg)
-		pitch, _ = self.instrument_selection_criteria(arg)
+		pitch, _ = self.instrument_selection_arg(arg)
 		group_id = self.pitch_groups[pitch]
 		del self.groups[group_id].instruments[pitch]
 
@@ -499,7 +497,7 @@ class Drumkit:
 		"""
 		return [ instrument.pitch for instrument in self.instruments() ]
 
-	def instrument_selection_criteria(self, arg):
+	def instrument_selection_arg(self, arg):
 		"""
 		Returns tuple:
 			(int) pitch
@@ -519,7 +517,7 @@ class Drumkit:
 
 		Raises IndexError if the instrument is not found in this Drumkit.
 		"""
-		pitch, _ = self.instrument_selection_criteria(arg)
+		pitch, _ = self.instrument_selection_arg(arg)
 		group_id = self.pitch_groups[pitch]
 		return self.groups[group_id].instruments[pitch]
 
