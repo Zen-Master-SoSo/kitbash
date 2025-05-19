@@ -110,9 +110,9 @@ class PercussionInstrument:
 		"""
 		Write in SFZ format to any file-like object, including sys.stdout
 
-		"exclude_opstrings" is a set of string representations (including name and value)
-		of all the opcodes NOT to define in this region, as they are common opcodes
-		defined in a parent header.
+		"exclude_opstrings" is a set of string representations (including name and
+		value) of all the opcodes NOT to define, as they are common opcodes defined in
+		a parent header.
 		"""
 		stream.write(f'// {self.name}\n')
 		stream.write(f'// MIDI pitch: {self.note.pitch}  Note name: {self.note}\n')

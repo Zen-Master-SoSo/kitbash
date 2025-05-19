@@ -33,19 +33,19 @@ from kitbash.drumkit_widget import DrumkitWidget
 class MainWindow(QMainWindow):
 
 	instance = None
-	initialized = False
+	options = None
 	sig_ports_complete = pyqtSignal()
 
-	def __new__(cls):
+	def __new__(cls, options):
 		if cls.instance is None:
 			cls.instance = super().__new__(cls)
 		return cls.instance
 
-	def __init__(self):
-		if self.initialized:
+	def __init__(self, options):
+		if self.options:
 			return
 		super().__init__()
-		self.initialized = True
+		self.options = options
 		with ShutUpQT():
 			uic.loadUi(os.path.join(PACKAGE_DIR, 'res', 'main_window.ui'), self)
 		#self.setWindowIcon(QIcon(os.path.join(PACKAGE_DIR, 'res', 'icon.png')))
@@ -99,6 +99,8 @@ class MainWindow(QMainWindow):
 		signal(SIGTERM, self.system_signal)
 		self.set_dirty(False)
 		self.instantiate_synth(self)
+		if self.options.Filename:
+			QTimer.singleShot(10, partial(self.load_project, self.options.Filename))
 
 	def setup_window_elements(self):
 		self.drumkit_widgets = VListLayout(end_space = 10)
@@ -767,7 +769,7 @@ def main():
 	p.epilog = """
 	Write your help text!
 	"""
-	p.add_argument('Filename', type=str, nargs='*', help='SFZ file[s] to include at startup')
+	p.add_argument('Filename', type=str, help='SFZ file[s] to include at startup')
 	p.add_argument("--log-file", "-l", type=str, help="Log to this file")
 	p.add_argument("--verbose", "-v", action="store_true", help="Show more detailed debug information")
 	options = p.parse_args()
@@ -798,7 +800,7 @@ def main():
 
 	app = QApplication([])
 	try:
-		main_window = MainWindow()
+		main_window = MainWindow(options)
 	except JackConnectError:
 		DevilBox('Could not connect to JACK server. Is it running?')
 		sys.exit(1)
