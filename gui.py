@@ -379,9 +379,11 @@ class MainWindow(QMainWindow):
 			self.new_synth = None
 		self.connect_audio_sink(associated_object.synth)
 		if isinstance(associated_object, DrumkitWidget):
+			logging.debug('%s ports complete', associated_object)
 			src = self.midi_splitter.output_ports[associated_object.port_number].name
 			tgt = associated_object.synth.input_port.name
 			self.conn_man.connect_by_name(src, tgt)
+			self.check_drumkit_ready(associated_object)
 		else:
 			self.connect_midi_source(associated_object.synth)
 
@@ -391,12 +393,12 @@ class MainWindow(QMainWindow):
 	def load_drumkit(self, filename):
 		if os.path.exists(filename):
 			drumkit_widget = DrumkitWidget(filename, self)
-			self.drumkit_widgets.append(drumkit_widget)
 			available_ports = self.available_port_numbers()
 			if len(available_ports):
-				drumkit_widget.port_number = list(available_ports)[0]
+				drumkit_widget.port_number = available_ports[0]
 			else:
 				DevilBox('Not enough ports (Maximum 16)')
+			self.drumkit_widgets.append(drumkit_widget)
 			drumkit_widget.sig_inst_toggle.connect(self.slot_inst_toggle)
 			drumkit_widget.sig_remove_drumkit.connect(self.slot_remove_drumkit)
 			self.instantiate_synth(drumkit_widget)
@@ -416,15 +418,21 @@ class MainWindow(QMainWindow):
 		"""
 		Called when KitLoader is finshed loading and interpreted SFZ.
 		"""
+		logging.debug('%s loaded', drumkit_widget)
 		self.action_collapse_kits.setEnabled(True)
-		if self.project_loading:
-			drumkit_widget.apply_selections(self.project_definition[drumkit_widget.sfz_filename])
-			self.check_project_load_complete()
-		else:
-			if len(self.drumkit_widgets) == 1:
-				drumkit_widget.select_all()
-				self.midi_splitter.assign_all_notes(drumkit_widget.port_number)
-			self.set_dirty()
+		self.check_drumkit_ready(drumkit_widget)
+
+	def check_drumkit_ready(self, drumkit_widget):
+		if not drumkit_widget.synth is None and not drumkit_widget.drumkit is None:
+			logging.debug('%s ready on port %s', drumkit_widget, drumkit_widget.port_number)
+			if self.project_loading:
+				drumkit_widget.apply_selections(self.project_definition[drumkit_widget.sfz_filename])
+				self.check_project_load_complete()
+			else:
+				if len(self.drumkit_widgets) == 1:
+					drumkit_widget.select_all()
+					self.midi_splitter.assign_all_notes(drumkit_widget.port_number)
+				self.set_dirty()
 
 	@pyqtSlot(QObject)
 	def slot_remove_drumkit(self, drumkit_widget):
@@ -495,14 +503,13 @@ class MainWindow(QMainWindow):
 		Returns a set of MidiSplitter port numbers assigned to drumkit widget's synth
 		"""
 		return set(drumkit_widget.port_number \
-			for drumkit_widget in self.drumkit_widgets\
-			if drumkit_widget.synth)
+			for drumkit_widget in self.drumkit_widgets)
 
 	def available_port_numbers(self):
 		"""
-		Returns a set of MidiSplitter port numbers not yet assigned to drumkit widget's synth
+		Returns a list of MidiSplitter port numbers not yet assigned to drumkit widget's synth
 		"""
-		return self.drumkit_port_ranges ^ self.used_port_numbers()
+		return list(self.drumkit_port_ranges ^ self.used_port_numbers())
 
 	# -----------------------------------------------------------------
 	# Quit / close / signals

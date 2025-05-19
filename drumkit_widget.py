@@ -70,13 +70,13 @@ class DrumkitWidget(QFrame):
 		self.lbl_audio_indicator.setPixmap(PIXMAP_AUDIO_OFF())
 		top_layout.addWidget(self.lbl_audio_indicator)
 
-		self.lbl_use_count = QLabel(self)
-		self.lbl_use_count.setText('(0)')
-		top_layout.addWidget(self.lbl_use_count)
-
 		label = QLabel(self)
 		label.setText(self.sfz_filename)
 		top_layout.addWidget(label)
+
+		self.lbl_use_count = QLabel(self)
+		self.lbl_use_count.setText('(0)')
+		top_layout.addWidget(self.lbl_use_count)
 
 		top_layout.addStretch(20)
 
