@@ -769,7 +769,7 @@ def main():
 	p.epilog = """
 	Write your help text!
 	"""
-	p.add_argument('Filename', type=str, help='SFZ file[s] to include at startup')
+	p.add_argument('Filename', type=str, nargs='?', help='SFZ file[s] to include at startup')
 	p.add_argument("--log-file", "-l", type=str, help="Log to this file")
 	p.add_argument("--verbose", "-v", action="store_true", help="Show more detailed debug information")
 	options = p.parse_args()
