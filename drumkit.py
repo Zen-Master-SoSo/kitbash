@@ -38,6 +38,11 @@ class Region(SFZRegion):
 	"""
 	A representation of an SFZ <region> header, extending the Region class from
 	sfzen in order to make it mutable.
+
+	Note that when a Drumkit Region is imported from an SFZ or another Drumkit,
+	opcodes from the source region as well as opcodes inherited from container
+	groups, (such as "Group", "Master", and "Global" groups), are included.
+
 	"""
 
 	def __init__(self, source_region, source_filename):
@@ -56,17 +61,16 @@ class Region(SFZRegion):
 			len(self._opcodes)
 		)
 
-	def write(self, stream, exclude_opstrings):
+	def write(self, stream, region_exclude):
 		"""
 		Write in SFZ format to any file-like object, including sys.stdout.
 
-		"exclude_opstrings" is a set of string representations (including name and value)
+		"region_exclude" is a set of string representations (including name and value)
 		of all the opcodes NOT to define in this region, as they are common opcodes
 		defined in a parent header.
 		"""
 		stream.write("<region>\n")
-		opstrings = opstring_sorted(self.opstrings - exclude_opstrings)
-		for opstring in opstrings:
+		for opstring in opstring_sorted(self.opstrings - region_exclude):
 			stream.write(opstring + '\n')
 		stream.write('\n')
 
@@ -106,42 +110,49 @@ class PercussionInstrument:
 		"""
 		return len(self.regions) == 0
 
-	def write(self, stream, exclude_opstrings):
+	def write(self, stream, global_opstrings):
 		"""
 		Write in SFZ format to any file-like object, including sys.stdout
 
-		"exclude_opstrings" is a set of string representations (including name and
+		"global_opstrings" is a set of string representations (including name and
 		value) of all the opcodes NOT to define, as they are common opcodes defined in
 		a parent header.
 		"""
-		stream.write(f'// {self.name}\n')
-		stream.write(f'// MIDI pitch: {self.note.pitch}  Note name: {self.note}\n')
+		stream.write(f'// "{self.name}" - key {self.note.pitch} / {self.note}\n')
 		stream.write(f'// Source: {self.source_filename}\n\n')
 		if len(self.regions) > 1:
-			common_opstrings = self.common_opstrings()
-			group_opstrings = common_opstrings - exclude_opstrings
-			if group_opstrings:
-				stream.write('<group>\n')
-				for opstring in opstring_sorted(group_opstrings):
-					stream.write(opstring + '\n')
-				stream.write('\n')
-			exclude_opstrings |= group_opstrings
+			group_opstrings = self.common_opstrings() - global_opstrings
+		else:
+			region = self.regions[0]
+			group_opstrings = set([
+				str(region.opcodes[key]) \
+				for key in ['lokey', 'hikey' ] \
+				if key in region.opcodes
+			])
+		stream.write('<group>\n')
+		for opstring in opstring_sorted(group_opstrings):
+			stream.write(opstring + '\n')
+		stream.write('\n')
+		region_exclude = global_opstrings | group_opstrings
 		for region in self.regions:
-			region.write(stream, exclude_opstrings)
+			region.write(stream, region_exclude)
+		stream.write('\n')
 
 	def opstrings_used(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the opcodes used in this Instrument.
 		"""
-		return reduce(or_, [region.opstrings for region in self.regions], set())
+		return reduce(or_, [region.opstrings \
+			for region in self.regions], set())
 
 	def common_opstrings(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the identical opcodes used in every region in this Instrument.
 		"""
-		return reduce(and_, [region.opstrings for region in self.regions], set())
+		opstrings = [region.opstrings for region in self.regions]
+		return reduce(and_, opstrings) if opstrings else set()
 
 	def regions_using_opstring(self, opstring):
 		"""
@@ -206,7 +217,7 @@ class PercussionGroup:
 		of all the opcodes NOT to define in this region, as they are common opcodes
 		defined in a parent header.
 		"""
-		stream.write(f'{COMMENT_DIVIDER}// "{self.name}" group\n{COMMENT_DIVIDER}\n')
+		stream.write(f'{COMMENT_DIVIDER}// "{self.name}"\n{COMMENT_DIVIDER}\n')
 		for inst in self.instruments.values():
 			if not inst.empty():
 				inst.write(stream, exclude_opstrings)
@@ -224,8 +235,9 @@ class PercussionGroup:
 		Returns a set of all the string representation (including name and value) of
 		all the identical opcodes used in every region in this Group.
 		"""
-		return reduce(and_, [instrument.opstrings_used() \
-			for instrument in self.instruments.values()], set())
+		opstrings = [instrument.opstrings_used() \
+			for instrument in self.instruments.values()]
+		return reduce(and_, opstrings) if opstrings else set()
 
 	def regions_using_opstring(self, opstring):
 		"""
@@ -392,7 +404,7 @@ class Drumkit:
 		stream.write(f'//\n// {self.name}\n//\n')
 		global_opstrings = self.common_opstrings()
 		if global_opstrings:
-			stream.write('<global>\n')
+			stream.write('\n<global>\n')
 			for opstring in opstring_sorted(global_opstrings):
 				stream.write(opstring + '\n')
 			stream.write('\n')
@@ -435,14 +447,18 @@ class Drumkit:
 		Returns a set of all the string representation (including name and value) of
 		all the opcodes used in this Drumkit
 		"""
-		return reduce(or_, [group.opstrings_used() for group in self.groups.values()], set())
+		return reduce(or_, [group.opstrings_used() \
+			for group in self.groups.values()], set())
 
 	def common_opstrings(self):
 		"""
 		Returns a set of all the string representation (including name and value) of
 		all the identical opcodes used in every region in this Drumki.
 		"""
-		return reduce(and_, [group.opstrings_used() for group in self.groups.values()], set())
+		opstrings = [group.common_opstrings() for group in self.groups.values()]
+		# Filter empty:
+		opstrings = [ opstrings_used for opstrings_used in opstrings if len(opstrings_used) ]
+		return reduce(and_, opstrings) if opstrings else set()
 
 	def regions_using_opstring(self, opstring):
 		"""
