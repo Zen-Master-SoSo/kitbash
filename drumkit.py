@@ -82,6 +82,8 @@ class PercussionInstrument:
 	sound of the instrument.
 	"""
 
+	key_opcodes = ['lokey', 'hikey', 'pitch_keycenter']
+
 	def __init__(self, pitch, regions, filename):
 		"""
 		Used when importing from an SFZ
@@ -121,19 +123,34 @@ class PercussionInstrument:
 		stream.write(f'// "{self.name}" - key {self.note.pitch} / {self.note}\n')
 		stream.write(f'// Source: {self.source_filename}\n\n')
 		if len(self.regions) > 1:
+			# Multiple regions; look for common opstrings:
 			group_opstrings = self.common_opstrings() - global_opstrings
 		else:
+			# One region; select only key -related opstrings
 			region = self.regions[0]
 			group_opstrings = set([
 				str(region.opcodes[key]) \
-				for key in ['lokey', 'hikey' ] \
+				for key in self.key_opcodes \
 				if key in region.opcodes
 			])
+		region_exclude = global_opstrings | group_opstrings
+		# Determine if we can replace 'lokey', 'hikey' and 'pitch_keycenter with 'key':
+		keyvals = [
+			opstring.split('=', 1)[1] \
+			for opstring in group_opstrings \
+			if opstring.split('=', 1)[0] in self.key_opcodes
+		]
+		if len(keyvals) == 3 and len(set(keyvals)) == 1:
+			group_opstrings = [
+				opstring \
+				for opstring in group_opstrings \
+				if opstring.split('=', 1)[0] not in self.key_opcodes
+			]
+			group_opstrings.append(f'key={keyvals[0]}')
 		stream.write('<group>\n')
 		for opstring in opstring_sorted(group_opstrings):
 			stream.write(opstring + '\n')
 		stream.write('\n')
-		region_exclude = global_opstrings | group_opstrings
 		for region in self.regions:
 			region.write(stream, region_exclude)
 		stream.write('\n')
