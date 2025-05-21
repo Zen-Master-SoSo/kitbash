@@ -113,6 +113,7 @@ class MainWindow(QMainWindow):
 		self.action_new_project.triggered.connect(self.slot_new_project)
 		self.action_open_project.triggered.connect(self.slot_open_project)
 		self.action_save_project.triggered.connect(self.slot_save_project)
+		self.action_save_project_as.triggered.connect(self.slot_save_project_as)
 		self.action_save_bashed_kit.triggered.connect(self.slot_save_bashed_kit)
 		self.action_load_kit.triggered.connect(self.slot_load_kit)
 		self.action_reload_style.triggered.connect(self.load_current_style)
@@ -254,17 +255,6 @@ class MainWindow(QMainWindow):
 			self.slot_remove_drumkit(widget)
 		self.set_dirty(False)
 
-	def check_project_load_complete(self):
-		"""
-		Determine if project loading is complete, reset "self.project_loading".
-		Returns True if complete
-		"""
-		if any(drumkit_widget.drumkit is None for drumkit_widget in self.drumkit_widgets):
-			return False
-		self.project_loading = False
-		self.set_dirty(False)
-		return True
-
 	# -----------------------------------------------------------------
 	# Source / sink combo boxes
 
@@ -401,8 +391,6 @@ class MainWindow(QMainWindow):
 			else:
 				DevilBox('Not enough ports (Maximum 16)')
 			self.drumkit_widgets.append(drumkit_widget)
-			drumkit_widget.sig_inst_toggle.connect(self.slot_inst_toggle)
-			drumkit_widget.sig_remove_drumkit.connect(self.slot_remove_drumkit)
 			self.instantiate_synth(drumkit_widget)
 			worker = KitLoader(drumkit_widget)
 			worker.signals.sig_loaded.connect(drumkit_widget.slot_drumkit_loaded)
@@ -420,21 +408,30 @@ class MainWindow(QMainWindow):
 		"""
 		Called when KitLoader is finshed loading and interpreted SFZ.
 		"""
-		logging.debug('%s loaded', drumkit_widget)
 		self.action_collapse_kits.setEnabled(True)
 		self.check_drumkit_ready(drumkit_widget)
 
 	def check_drumkit_ready(self, drumkit_widget):
-		if not drumkit_widget.synth is None and not drumkit_widget.drumkit is None:
-			logging.debug('%s ready on port %s', drumkit_widget, drumkit_widget.port_number)
+		"""
+		Called:
+			1.	after KitLoader is finished,
+			2.	after synth is assigned (ports ready)
+		If ready when project_loading, applies saved selections.
+		Check if all drumkits are ready during project_loading.
+		"""
+		if drumkit_widget.ready():
 			if self.project_loading:
 				drumkit_widget.apply_selections(self.project_definition[drumkit_widget.sfz_filename])
-				self.check_project_load_complete()
+				if all(drumkit_widget.ready() for drumkit_widget in self.drumkit_widgets):
+					self.project_loading = False
+					self.update_ui()
 			else:
 				if len(self.drumkit_widgets) == 1:
 					drumkit_widget.select_all()
 					self.midi_splitter.assign_all_notes(drumkit_widget.port_number)
 				self.set_dirty()
+			drumkit_widget.sig_inst_toggle.connect(self.slot_inst_toggle)
+			drumkit_widget.sig_remove_drumkit.connect(self.slot_remove_drumkit)
 
 	@pyqtSlot(QObject)
 	def slot_remove_drumkit(self, drumkit_widget):
@@ -614,16 +611,24 @@ class MainWindow(QMainWindow):
 	@pyqtSlot()
 	def slot_save_project(self):
 		if self.project_filename is None:
-			QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, False)
-			filename, _ = QFileDialog.getSaveFileName(
-				self,
-				"Save Kitbash project ...",
-				"kitbash.json",
-				"Kitbash project (*.json)"
-			)
-			if filename == '':
-				return
-			self.project_filename = filename
+			self.slot_save_project_as()
+		else:
+			self.save_project()
+
+	@pyqtSlot()
+	def slot_save_project_as(self):
+		QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, False)
+		filename, _ = QFileDialog.getSaveFileName(
+			self,
+			"Save Kitbash project ...",
+			settings().value("recent_project_folder", os.getcwd() \
+				if self.project_filename is None \
+				else os.path.dirname(self.project_filename)),
+			"Kitbash project (*.json)"
+		)
+		if filename == '':
+			return
+		self.project_filename = filename
 		self.save_project()
 
 	@pyqtSlot()
@@ -756,7 +761,6 @@ class FileSaveDialog(QFileDialog):
 		super().accept()
 
 	def done(self, result):
-		print('FileSaveDialog done')
 		settings().setValue("geometry/FileSaveDialog", self.saveGeometry())
 		super().done(result)
 

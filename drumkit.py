@@ -171,15 +171,6 @@ class PercussionInstrument:
 		opstrings = [region.opstrings for region in self.regions]
 		return reduce(and_, opstrings) if opstrings else set()
 
-	def regions_using_opstring(self, opstring):
-		"""
-		Generator function which yields each Region which uses the opcode specified.
-		opstring: the string representation (including name and value) of an opcode.
-		"""
-		for region in self.regions:
-			if region.uses_opstring(opstring):
-				yield region
-
 	def samples_used(self):
 		"""
 		Returns a set of all raw values of all "sample" opcodes contained in the
@@ -255,14 +246,6 @@ class PercussionGroup:
 		opstrings = [instrument.opstrings_used() \
 			for instrument in self.instruments.values()]
 		return reduce(and_, opstrings) if opstrings else set()
-
-	def regions_using_opstring(self, opstring):
-		"""
-		Generator function which yields each Region which uses the opcode specified.
-		opstring: the string representation (including name and value) of an opcode.
-		"""
-		for instrument in self.instruments.values():
-			yield from instrument.regions_using_opstring(opstring)
 
 	def samples_used(self):
 		"""
@@ -375,13 +358,20 @@ class Drumkit:
 				if regions:
 					self.groups[group_id].append_instrument(pitch, regions, filename)
 
-	def save_as(self, filename, samples_mode = SAMPLES_ABSPATH):
+	def save_as(self, filename, samples_mode = SAMPLES_ABSPATH, samples_path = None):
 		"""
 		Save in SFZ format to the given filename.
+
 		"samples_mode" is a kitbash constant which defines how to render "sample"
 		opcodes. May be one of:
 			SAMPLES_ABSPATH		SAMPLES_RESOLVE		SAMPLES_COPY
 			SAMPLES_SYMLINK		SAMPLES_HARDLINK
+
+		"samples_path" may be used to override the default "samples" directory when
+		copying, symlinking, or hardlinking samples (not absolute or relative paths to
+		the originals). The samples directory will be created immediately beneath the
+		directory where the .sfz file is written. You may provide only the directory's
+		basename.
 		"""
 		filename = path.abspath(filename)
 		target_dir = path.dirname(filename)
@@ -396,7 +386,8 @@ class Drumkit:
 			for sample in self.samples():
 				sample.resolve_from(target_dir)
 		else:
-			target_sample_dir = path.join(target_dir, 'samples')
+			target_sample_dir = path.join(target_dir, 'samples' \
+				if samples_path is None else samples_path)
 			try:
 				mkdir(target_sample_dir)
 			except FileExistsError:
@@ -474,27 +465,8 @@ class Drumkit:
 		"""
 		opstrings = [group.common_opstrings() for group in self.groups.values()]
 		# Filter empty:
-		opstrings = [ opstrings_used for opstrings_used in opstrings if len(opstrings_used) ]
+		opstrings = [ used_opstrings for used_opstrings in opstrings if len(used_opstrings) ]
 		return reduce(and_, opstrings) if opstrings else set()
-
-	def regions_using_opstring(self, opstring):
-		"""
-		Generator function which yields each Region which uses the opcode specified.
-		opcode: the string representation (including name and value) of an opcode.
-		"""
-		for group in self.groups.values():
-			yield from group.regions_using_opstring(opstring)
-
-	def opstring_usage(self):
-		"""
-		Returns a dict of lists
-		Keys are the string representation of the opcode, (including name and value).
-		Values are a list of regions where it is used.
-		"""
-		return {
-			opstring:list(self.regions_using_opstring(opstring)) \
-			for opstring in self.opstrings_used()
-		}
 
 	def samples(self):
 		"""

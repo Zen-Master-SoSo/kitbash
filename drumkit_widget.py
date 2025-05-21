@@ -100,6 +100,9 @@ class DrumkitWidget(QFrame):
 		main_layout.addWidget(self.frm_groups)
 		self.setLayout(main_layout)
 
+	def ready(self):
+		return not self.synth is None and not self.drumkit is None
+
 	@pyqtSlot(Drumkit)
 	def slot_drumkit_loaded(self, drumkit):
 		"""
@@ -129,7 +132,7 @@ class DrumkitWidget(QFrame):
 		Tied to a GroupButton click event.
 		"group_frame" is the QFrame which contains the clicked GroupButton and various
 		InstrumentButton instances.
-		InstrumentButton signals are not suppressed, and so trigger "sig_inst_toggle".
+		InstrumentButton signals are not suppressed, and trigger "sig_inst_toggle".
 		"""
 		group_button = group_frame.findChild(GroupButton)
 		for inst_button in group_frame.findChildren(InstrumentButton):
