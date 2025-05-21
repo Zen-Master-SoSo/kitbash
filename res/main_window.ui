@@ -217,7 +217,6 @@
     <addaction name="action_save_project_as"/>
     <addaction name="menu_RecentProject"/>
     <addaction name="separator"/>
-    <addaction name="action_load_kit"/>
     <addaction name="menu_RecentDrumkits"/>
     <addaction name="action_save_bashed_kit"/>
     <addaction name="separator"/>
@@ -237,10 +236,18 @@
     <addaction name="menu_Style"/>
     <addaction name="action_reload_style"/>
    </widget>
+   <widget class="QMenu" name="menu_Edit">
+    <property name="title">
+     <string>&amp;Edit</string>
+    </property>
+    <addaction name="action_add_drumkit"/>
+    <addaction name="action_remove_all_kits"/>
+   </widget>
    <addaction name="menu_File"/>
+   <addaction name="menu_Edit"/>
    <addaction name="menu_View"/>
   </widget>
-  <action name="action_load_kit">
+  <action name="action_add_drumkit">
    <property name="text">
     <string>Load Drum&amp;Kit</string>
    </property>
@@ -331,6 +338,11 @@
    </property>
    <property name="toolTip">
     <string>Save the kitbash project under a different name</string>
+   </property>
+  </action>
+  <action name="action_remove_all_kits">
+   <property name="text">
+    <string>Remove All Drumkits</string>
    </property>
   </action>
  </widget>

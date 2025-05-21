@@ -63,7 +63,7 @@ class DrumkitWidget(QFrame):
 		self.hide_button.setFixedWidth(20)
 		self.hide_button.setFixedHeight(20)
 		self.hide_button.setCheckable(True)
-		self.hide_button.toggled.connect(self.hide)
+		self.hide_button.toggled.connect(self.slot_hide)
 		top_layout.addWidget(self.hide_button)
 
 		self.lbl_audio_indicator = QLabel(self)
@@ -83,7 +83,7 @@ class DrumkitWidget(QFrame):
 		remove_button = QPushButton(self)
 		remove_button.setIcon(ICON_CLOSE())
 		remove_button.setIconSize(QSize(16,16))
-		remove_button.clicked.connect(self.remove_clicked)
+		remove_button.clicked.connect(self.slot_remove_clicked)
 		top_layout.addWidget(remove_button)
 
 		frm_title.setLayout(top_layout)
@@ -101,6 +101,9 @@ class DrumkitWidget(QFrame):
 		self.setLayout(main_layout)
 
 	def ready(self):
+		"""
+		Returns "True" if this DrumkitWidget is setup with synth ports and bashed kit.
+		"""
 		return not self.synth is None and not self.drumkit is None
 
 	@pyqtSlot(Drumkit)
@@ -115,21 +118,21 @@ class DrumkitWidget(QFrame):
 				continue
 			group_frame = GroupFrame(group, self)
 			group_frame.group_id = group.group_id
-			group_frame.group_button.clicked.connect(partial(self.group_clicked, group_frame))
+			group_frame.group_button.clicked.connect(partial(self.slot_group_clicked, group_frame))
 			for inst in group.instruments.values():
 				inst_button = InstrumentButton(inst, group_frame)
-				inst_button.toggled.connect(partial(self.instrument_toggled, inst_button))
-				inst_button.sig_mouse_press.connect(self.instrument_pressed)
-				inst_button.sig_mouse_release.connect(self.instrument_released)
+				inst_button.toggled.connect(partial(self.slot_instrument_toggled, inst_button))
+				inst_button.sig_mouse_press.connect(self.slot_instrument_pressed)
+				inst_button.sig_mouse_release.connect(self.slot_instrument_released)
 				group_frame.group_layout.addWidget(inst_button)
 			group_frame.group_layout.addStretch()
 			self.groups.addWidget(group_frame)
 		self.groups.addStretch()
 
 	@pyqtSlot(QFrame)
-	def group_clicked(self, group_frame):
+	def slot_group_clicked(self, group_frame):
 		"""
-		Tied to a GroupButton click event.
+		Triggered by a GroupButton click event.
 		"group_frame" is the QFrame which contains the clicked GroupButton and various
 		InstrumentButton instances.
 		InstrumentButton signals are not suppressed, and trigger "sig_inst_toggle".
@@ -139,17 +142,25 @@ class DrumkitWidget(QFrame):
 			inst_button.setChecked(group_button.isChecked())
 
 	@pyqtSlot(PercussionInstrument)
-	def instrument_pressed(self, inst):
+	def slot_instrument_pressed(self, inst):
+		"""
+		Triggered by InstrumentButton mouse press.
+		Sends a "noteon" to this widget's synth.
+		"""
 		self.synth.noteon(0, inst.pitch, 120)
 
 	@pyqtSlot(PercussionInstrument)
-	def instrument_released(self, inst):
+	def slot_instrument_released(self, inst):
+		"""
+		Triggered by InstrumentButton mouse relase.
+		Sends a "v" to this widget's synth.
+		"""
 		self.synth.noteoff(0, inst.pitch)
 
 	@pyqtSlot(QPushButton)
-	def instrument_toggled(self, button):
+	def slot_instrument_toggled(self, button):
 		"""
-		Tied to an InstrumentButton toggle event.
+		Triggered by an InstrumentButton toggle event.
 		"inst_id" is a string key, enumerated in the DrumkitClass.
 		"button" is the InstrumentButton which was toggled.
 		"""
@@ -158,14 +169,14 @@ class DrumkitWidget(QFrame):
 		self.update_count()
 
 	@pyqtSlot()
-	def remove_clicked(self):
+	def slot_remove_clicked(self):
 		"""
-		Tied to the "remove" button click.
+		Triggered by the "remove" button click event.
 		"""
 		self.sig_remove_drumkit.emit(self)
 
 	@pyqtSlot(bool)
-	def hide(self, state):
+	def slot_hide(self, state):
 		"""
 		"Roll up" this DrumkitWidget.
 		"""
@@ -241,6 +252,10 @@ class DrumkitWidget(QFrame):
 				if button.isChecked() ]
 
 	def select_all(self):
+		"""
+		Select all instruments - does not trigger signals.
+		Called when this is the first DrumkitWidget added to a project.
+		"""
 		for type_ in [GroupButton, InstrumentButton]:
 			buttons = self.findChildren(type_)
 			with SigBlock(* buttons):
@@ -312,6 +327,11 @@ class GroupButton(QPushButton):
 
 
 class InstrumentButton(QPushButton):
+	"""
+	Custom button with a contained InstrumentLabel and QCheckBox.
+	The InstrumentLabel traps mouse press events, while the QCheckBox mirrors the
+	"checked" state of this QPushButton.
+	"""
 
 	sig_mouse_press = pyqtSignal(PercussionInstrument)
 	sig_mouse_release = pyqtSignal(PercussionInstrument)

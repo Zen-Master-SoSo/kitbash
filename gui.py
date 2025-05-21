@@ -75,7 +75,7 @@ class MainWindow(QMainWindow):
 		self.load_current_style()
 		self.setup_window_elements()
 		self.connect_actions()
-		# Setup KitLoader threadpool
+		# Setup background threadpool for KitLoader and KitBasher workers
 		self.background_threadpool = QThreadPool()
 		# Setup connection manager and synth creation pool
 		self.conn_man = JackConnectionManager()
@@ -115,7 +115,8 @@ class MainWindow(QMainWindow):
 		self.action_save_project.triggered.connect(self.slot_save_project)
 		self.action_save_project_as.triggered.connect(self.slot_save_project_as)
 		self.action_save_bashed_kit.triggered.connect(self.slot_save_bashed_kit)
-		self.action_load_kit.triggered.connect(self.slot_load_kit)
+		self.action_add_drumkit.triggered.connect(self.slot_add_drumkit)
+		self.action_remove_all_kits.triggered.connect(self.slot_remove_all_kits)
 		self.action_reload_style.triggered.connect(self.load_current_style)
 		self.menu_RecentProject.aboutToShow.connect(self.slot_show_recent_projects)
 		self.menu_RecentDrumkits.aboutToShow.connect(self.slot_show_recent_drumkits)
@@ -132,6 +133,7 @@ class MainWindow(QMainWindow):
 		has_kits = bool(len(self.drumkit_widgets))
 		self.action_collapse_kits.setEnabled(has_kits)
 		self.action_collapse_kits.setChecked(has_kits)
+		self.action_remove_all_kits.setEnabled(has_kits)
 		self.action_new_project.setEnabled(has_kits)
 		self.action_save_project.setEnabled(has_kits and self.dirty)
 		self.action_save_bashed_kit.setEnabled(has_kits)
@@ -212,8 +214,8 @@ class MainWindow(QMainWindow):
 				self.project_filename = filename
 				self.register_recent_project()
 				self.project_loading = True
-				for filename in self.project_definition.keys():
-					self.load_drumkit(filename)
+				for sfzfile in self.project_definition.keys():
+					self.load_drumkit(sfzfile)
 		else:
 			self.recent_projects.remove(filename)
 			settings().setValue("recent_projects", self.recent_projects.items)
@@ -244,7 +246,7 @@ class MainWindow(QMainWindow):
 		if ret == QMessageBox.Save:
 			self.slot_save_project()
 			return True
-		elif ret == QMessageBox.Cancel:
+		if ret == QMessageBox.Cancel:
 			return False
 		else:
 			return True
@@ -383,6 +385,11 @@ class MainWindow(QMainWindow):
 	# Drumkit load / delete / instrument selection
 
 	def load_drumkit(self, filename):
+		"""
+		Adds a drumkit.
+		Called at project load; triggered by "Edit -> Load Drumkit";
+		triggered by kits_area custom context menu.
+		"""
 		if os.path.exists(filename):
 			drumkit_widget = DrumkitWidget(filename, self)
 			available_ports = self.available_port_numbers()
@@ -435,6 +442,11 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot(QObject)
 	def slot_remove_drumkit(self, drumkit_widget):
+		"""
+		Directly triggered by kits_area custom context menu;
+		called in any place where a drumkit_widget needs to be removed,
+		including clear(), slot_remove_all_kits().
+		"""
 		self.midi_splitter.clear_port_assignments(drumkit_widget.port_number)
 		drumkit_widget.synth.quit()
 		self.drumkit_widgets.remove(drumkit_widget)
@@ -486,7 +498,6 @@ class MainWindow(QMainWindow):
 		"""
 		Triggered from KitBasher signal when bashing is finished.
 		"""
-		self.bashed_kit = bashed_kit
 		try:
 			bashed_kit.save_as(self.bashed_sfz_filename, self.bashed_sfz_samples_mode)
 			self.synth.load(self.bashed_sfz_filename)
@@ -514,6 +525,9 @@ class MainWindow(QMainWindow):
 	# Quit / close / signals
 
 	def closeEvent(self, event):
+		"""
+		PyQt closeEvent overload.
+		"""
 		logging.debug('MainWindow close()')
 		self.synth.quit()
 		for drumkit_widget in self.drumkit_widgets:
@@ -523,6 +537,9 @@ class MainWindow(QMainWindow):
 		event.accept()
 
 	def system_signal(self, *_):
+		"""
+		Catch system signals SIGINT and SIGTERM
+		"""
 		logging.debug('Caught signal - shutting down')
 		self.close()
 
@@ -531,11 +548,17 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def slot_xruns_clicked(self):
+		"""
+		Triggered by b_xruns.click()
+		"""
 		self.base_xruns = self.current_xruns
 		self.b_xruns.setText('0')
 
 	@pyqtSlot(QPoint)
 	def slot_kits_context_menu(self, position):
+		"""
+		Triggered by kits_area.customContextMenuRequested
+		"""
 		menu = QMenu()
 		clicked_drumkit_widget = self.kits_area.childAt(position)
 		if clicked_drumkit_widget is not None:
@@ -546,22 +569,24 @@ class MainWindow(QMainWindow):
 				action = QAction(f'Remove "{clicked_drumkit_widget.moniker}"', self)
 				action.triggered.connect(partial(self.slot_remove_drumkit, clicked_drumkit_widget))
 				menu.addAction(action)
-		action = QAction('Add drumkit', self)
-		action.triggered.connect(self.slot_load_kit)
-		menu.addAction(action)
-		if len(self.drumkit_widgets) > 0:
-			action = QAction('Remove all drumkits', self)
-			action.triggered.connect(self.slot_remove_all_kits)
-			menu.addAction(action)
+		menu.addAction(self.action_add_drumkit)
+		menu.addAction(self.action_remove_all_kits)
+		menu.addAction(self.action_collapse_kits)
 		menu.exec(self.kits_area.mapToGlobal(position))
 
 	@pyqtSlot()
 	def slot_remove_all_kits(self):
+		"""
+		Triggered by 'Edit -> Remove All Drumkits" menu and kits_area context menu.
+		"""
 		for drumkit_widget in reversed(self.drumkit_widgets):
 			self.slot_remove_drumkit(drumkit_widget)
 
 	@pyqtSlot()
 	def slot_collapse_kits(self):
+		"""
+		Triggered by "View -> Collapse Kits"
+		"""
 		for widget in self.drumkit_widgets:
 			widget.hide_button.setChecked(True)
 
@@ -593,11 +618,17 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def slot_new_project(self):
+		"""
+		Triggered by "File -> New"
+		"""
 		if self.permission_to_clear():
 			self.clear()
 
 	@pyqtSlot()
 	def slot_open_project(self):
+		"""
+		Triggered by "File -> Open Project"
+		"""
 		if self.permission_to_clear():
 			QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, False)
 			filename = QFileDialog.getOpenFileName(self,
@@ -610,6 +641,10 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def slot_save_project(self):
+		"""
+		Triggered by "File -> Save Project"
+		Opens the file save dialog if project_filename is None; calls "save_project".
+		"""
 		if self.project_filename is None:
 			self.slot_save_project_as()
 		else:
@@ -617,6 +652,10 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def slot_save_project_as(self):
+		"""
+		Triggered by "File -> Save Project As"
+		Opens the file save dialog, sets project_filename, calls "save_project".
+		"""
 		QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, False)
 		filename, _ = QFileDialog.getSaveFileName(
 			self,
@@ -634,6 +673,7 @@ class MainWindow(QMainWindow):
 	@pyqtSlot()
 	def slot_save_bashed_kit(self):
 		"""
+		Triggered by "File -> Save bashed kit" menu
 		See also: slot_drumkit_bashed
 		"""
 		dlg = FileSaveDialog(self)
@@ -645,7 +685,10 @@ class MainWindow(QMainWindow):
 			self.background_threadpool.start(worker)
 
 	@pyqtSlot()
-	def slot_load_kit(self):
+	def slot_add_drumkit(self):
+		"""
+		Triggered by "Edit -> Add Drumkit" menu, and kits_area custom context menu..
+		"""
 		QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, False)
 		filename = QFileDialog.getOpenFileName(self,
 			"Load Drumkit",
@@ -657,13 +700,19 @@ class MainWindow(QMainWindow):
 
 
 class KitWorkerSignals(QObject):
-
+	"""
+	Signals common to KitLoader and KitBasher.
+	(PyQt QRunnable does not support its own signals)
+	"""
 	sig_loaded = pyqtSignal(Drumkit)
 	sig_widget_loaded = pyqtSignal(DrumkitWidget, Drumkit)
 	sig_bashed = pyqtSignal(Drumkit)
 
 
 class KitLoader(QRunnable):
+	"""
+	Loads a drumkit in a background thread and emits "sig_loaded" when done.
+	"""
 
 	def __init__(self, drumkit_widget):
 		super().__init__()
@@ -678,7 +727,9 @@ class KitLoader(QRunnable):
 
 
 class KitBasher(QRunnable):
-
+	"""
+	Compiles a bashed kit and signals that its ready to be saved.
+	"""
 
 	def __init__(self, drumkit_widgets):
 		super().__init__()
@@ -695,6 +746,10 @@ class KitBasher(QRunnable):
 
 
 class JackLiquidSFZ(LiquidSFZ):
+	"""
+	Wraps a LiquidSFZ instance in order to hold references to jacklib ports created
+	by JackConnectionManager.
+	"""
 
 	def __init__(self, filename):
 		self.client_name = None
@@ -704,6 +759,9 @@ class JackLiquidSFZ(LiquidSFZ):
 
 
 class FileSaveDialog(QFileDialog):
+	"""
+	Custom file dialog with added option for choosing samples_mode.
+	"""
 
 	def __init__(self, parent):
 		QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs)
@@ -752,15 +810,24 @@ class FileSaveDialog(QFileDialog):
 
 	@pyqtSlot(int, bool)
 	def slot_set_mode(self, mode, state):
+		"""
+		Tiggered by any sample mode selection radio button.
+		"""
 		self.samples_mode = mode
 
 	def accept(self):
+		"""
+		Overloaded function saves preferred mode, sets "selected_file".
+		"""
 		settings().setValue("save_as_samples_mode", self.samples_mode)
 		selected_files = self.selectedFiles()
 		self.selected_file = selected_files[0] if selected_files else None
 		super().accept()
 
 	def done(self, result):
+		"""
+		Overloaded function saves geometry.
+		"""
 		settings().setValue("geometry/FileSaveDialog", self.saveGeometry())
 		super().done(result)
 

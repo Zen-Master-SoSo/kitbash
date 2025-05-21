@@ -358,25 +358,22 @@ class Drumkit:
 				if regions:
 					self.groups[group_id].append_instrument(pitch, regions, filename)
 
-	def save_as(self, filename, samples_mode = SAMPLES_ABSPATH, samples_path = None):
+	def save_as(self, filename, samples_mode = SAMPLES_ABSPATH):
 		"""
 		Save in SFZ format to the given filename.
 
 		"samples_mode" is a kitbash constant which defines how to render "sample"
 		opcodes. May be one of:
+
 			SAMPLES_ABSPATH		SAMPLES_RESOLVE		SAMPLES_COPY
 			SAMPLES_SYMLINK		SAMPLES_HARDLINK
 
-		"samples_path" may be used to override the default "samples" directory when
-		copying, symlinking, or hardlinking samples (not absolute or relative paths to
-		the originals). The samples directory will be created immediately beneath the
-		directory where the .sfz file is written. You may provide only the directory's
-		basename.
 		"""
 		filename = path.abspath(filename)
-		target_dir = path.dirname(filename)
+		target_sfz_dir = path.dirname(filename)
+		filetitle, ext = path.splitext(path.basename(filename))
 		try:
-			mkdir(target_dir)
+			mkdir(target_sfz_dir)
 		except FileExistsError:
 			pass
 		if samples_mode == SAMPLES_ABSPATH:
@@ -384,25 +381,24 @@ class Drumkit:
 				sample.use_abspath()
 		elif samples_mode == SAMPLES_RESOLVE:
 			for sample in self.samples():
-				sample.resolve_from(target_dir)
+				sample.resolve_from(target_sfz_dir)
 		else:
-			target_sample_dir = path.join(target_dir, 'samples' \
-				if samples_path is None else samples_path)
+			samples_path = filetitle + '-samples'
 			try:
-				mkdir(target_sample_dir)
+				mkdir(path.join(target_sfz_dir, samples_path))
 			except FileExistsError:
 				pass
 			for sample in self.samples():
 				try:
 					if samples_mode == SAMPLES_COPY:
-						sample.copy_to(target_sample_dir)
+						sample.copy_to(target_sfz_dir, samples_path)
 					elif samples_mode == SAMPLES_SYMLINK:
-						sample.symlink_to(target_sample_dir)
+						sample.symlink_to(target_sfz_dir, samples_path)
 					elif samples_mode == SAMPLES_HARDLINK:
-						sample.hardlink_to(target_sample_dir)
+						sample.hardlink_to(target_sfz_dir, samples_path)
 				except FileExistsError:
 					pass
-		with open(filename, 'w') as fob:
+		with open(filename + '.sfz' if ext == '' else filename, 'w') as fob:
 			self.write(fob)
 
 	def write(self, stream):
