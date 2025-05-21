@@ -18,7 +18,7 @@ from kitbash.drumkit import Drumkit, PercussionInstrument
 from kitbash.icons import (
 	GROUP_EXPANDED,
 	GROUP_HIDDEN,
-	ICON_CLOSE,
+	ICON_REMOVE,
 	PIXMAP_AUDIO_OFF,
 	PIXMAP_AUDIO_ON
 )
@@ -81,7 +81,7 @@ class DrumkitWidget(QFrame):
 		top_layout.addStretch(20)
 
 		remove_button = QPushButton(self)
-		remove_button.setIcon(ICON_CLOSE())
+		remove_button.setIcon(ICON_REMOVE())
 		remove_button.setIconSize(QSize(16,16))
 		remove_button.clicked.connect(self.slot_remove_clicked)
 		top_layout.addWidget(remove_button)

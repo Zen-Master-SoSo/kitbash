@@ -13,7 +13,7 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import QSize
 from kitbash import PACKAGE_DIR
 
-AUDIO_ICON_SIZE = QSize(21, 18)
+AUDIO_ICON_SIZE = 16
 
 @lru_cache
 def GROUP_EXPANDED():
@@ -24,8 +24,8 @@ def GROUP_HIDDEN():
 	return QIcon(os.path.join(PACKAGE_DIR, 'res', 'group_hidden.svg'))
 
 @lru_cache
-def ICON_CLOSE():
-	return QIcon(os.path.join(PACKAGE_DIR, 'res', 'close.svg'))
+def ICON_REMOVE():
+	return QIcon.fromTheme('edit-delete')
 
 @lru_cache
 def PIXMAP_AUDIO_OFF():
