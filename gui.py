@@ -48,7 +48,7 @@ class MainWindow(QMainWindow):
 		self.options = options
 		with ShutUpQT():
 			uic.loadUi(os.path.join(PACKAGE_DIR, 'res', 'main_window.ui'), self)
-		#self.setWindowIcon(QIcon(os.path.join(PACKAGE_DIR, 'res', 'icon.png')))
+		self.setWindowIcon(QIcon(os.path.join(PACKAGE_DIR, 'res', 'kitbash-icon.png')))
 		geometry = settings().value("geometry/MainWindow", None)
 		if geometry is not None:
 			self.restoreGeometry(geometry)

@@ -16,8 +16,8 @@ from liquiphy import LiquidSFZ
 from kitbash import PACKAGE_DIR
 from kitbash.drumkit import Drumkit, PercussionInstrument
 from kitbash.icons import (
-	ICON_EXPANDED,
-	ICON_HIDDEN,
+	GROUP_EXPANDED,
+	GROUP_HIDDEN,
 	ICON_CLOSE,
 	PIXMAP_AUDIO_OFF,
 	PIXMAP_AUDIO_ON
@@ -58,7 +58,7 @@ class DrumkitWidget(QFrame):
 		top_layout.setSpacing(0)
 
 		self.hide_button = QPushButton(self)
-		self.hide_button.setIcon(ICON_EXPANDED())
+		self.hide_button.setIcon(GROUP_EXPANDED())
 		self.hide_button.setIconSize(QSize(16,16))
 		self.hide_button.setFixedWidth(20)
 		self.hide_button.setFixedHeight(20)
@@ -173,11 +173,11 @@ class DrumkitWidget(QFrame):
 			self.initial_height = self.height()
 			self.frm_groups.hide()
 			self.setFixedHeight(30)
-			self.hide_button.setIcon(ICON_HIDDEN())
+			self.hide_button.setIcon(GROUP_HIDDEN())
 		else:
 			self.frm_groups.show()
 			self.setFixedHeight(self.initial_height)
-			self.hide_button.setIcon(ICON_EXPANDED())
+			self.hide_button.setIcon(GROUP_EXPANDED())
 
 	def update_count(self):
 		"""
