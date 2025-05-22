@@ -147,7 +147,7 @@ class MainWindow(QMainWindow):
 		Fill a style menu with the list of discovered styles
 		(see discover styles)
 		"""
-		self._styles = { '.'.join(os.path.basename(path).split('.')[:-1]): path \
+		self._styles = { os.path.splitext(os.path.basename(path))[0] : path \
 						for path in glob.glob(os.path.join(PACKAGE_DIR, 'styles', '*.css')) }
 		current_style = settings().value("style")
 		actions = QActionGroup(self)
