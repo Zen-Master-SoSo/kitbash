@@ -211,7 +211,7 @@ class MainWindow(QMainWindow):
 			else:
 				if len(self.drumkit_widgets):
 					self.clear()
-				self.project_filename = filename
+				self.project_filename = os.path.realpath(filename)
 				self.register_recent_project()
 				self.project_loading = True
 				for sfzfile in self.project_definition.keys():
@@ -344,8 +344,14 @@ class MainWindow(QMainWindow):
 		self.close()
 
 	def jack_client_registration(self, client_name, action):
-		if action and self.new_synth and 'liquidsfz' in client_name:
-			self.new_synth.client_name = client_name
+		if action:
+			if self.new_synth and 'liquidsfz' in client_name:
+				self.new_synth.client_name = client_name
+		else:
+			if self.cmb_audio_sinks.findText(client_name, Qt.MatchStartsWith) > -1:
+				self.fill_cmb_sinks()
+			elif self.cmb_midi_srcs.findText(client_name, Qt.MatchStartsWith) > -1:
+				self.fill_cmb_sources()
 
 	def jack_port_registration(self, port, action):
 		if action and \
@@ -360,8 +366,11 @@ class MainWindow(QMainWindow):
 				logging.error('Incorrect port type: %s', port)
 			if self.new_synth.input_port and len(self.new_synth.output_ports) == 2:
 				self.sig_ports_complete.emit()
-		elif port.is_output and port.is_midi and APPLICATION_NAME not in port.name:
-			self.fill_cmb_sources()
+		elif APPLICATION_NAME not in port.name:
+			if port.is_output and port.is_midi:
+				self.fill_cmb_sources()
+			elif port.is_input and port.is_audio:
+				self.fill_cmb_sinks()
 
 	@pyqtSlot()
 	def slot_ports_complete(self):
@@ -387,9 +396,11 @@ class MainWindow(QMainWindow):
 	def load_drumkit(self, filename):
 		"""
 		Adds a drumkit.
-		Called at project load; triggered by "Edit -> Load Drumkit";
-		triggered by kits_area custom context menu.
+		1. called at project load
+		2. triggered by "Edit -> Load Drumkit" menu
+		3. triggered by kits_area custom context menu
 		"""
+		global app
 		if os.path.exists(filename):
 			drumkit_widget = DrumkitWidget(filename, self)
 			available_ports = self.available_port_numbers()
@@ -398,17 +409,20 @@ class MainWindow(QMainWindow):
 			else:
 				DevilBox('Not enough ports (Maximum 16)')
 			self.drumkit_widgets.append(drumkit_widget)
+			app.processEvents()
 			self.instantiate_synth(drumkit_widget)
 			worker = KitLoader(drumkit_widget)
 			worker.signals.sig_loaded.connect(drumkit_widget.slot_drumkit_loaded)
 			worker.signals.sig_widget_loaded.connect(self.slot_drumkit_widget_loaded)
 			self.background_threadpool.start(worker)
-			self.recent_drumkits.select(filename)
-			settings().setValue("recent_drumkit_folder", os.path.dirname(filename))
+			if not self.project_loading:
+				self.recent_drumkits.select(filename)
+				settings().setValue("recent_drumkit_folder", os.path.dirname(filename))
 		else:
 			self.recent_drumkits.remove(filename)
 			DevilBox(f"File not found: {filename}")
-		settings().setValue("recent_drumkits", self.recent_drumkits.items)
+		if not self.project_loading:
+			settings().setValue("recent_drumkits", self.recent_drumkits.items)
 
 	@pyqtSlot(DrumkitWidget)
 	def slot_drumkit_widget_loaded(self, drumkit_widget):
@@ -420,13 +434,14 @@ class MainWindow(QMainWindow):
 
 	def check_drumkit_ready(self, drumkit_widget):
 		"""
-		Called:
-			1.	after KitLoader is finished,
-			2.	after synth is assigned (ports ready)
+		Check if any/all drumkit widget has a synth assigned and a bashed kit.
+		1. called after KitLoader is finished,
+		2. called after synth is assigned (ports ready)
 		If ready when project_loading, applies saved selections.
-		Check if all drumkits are ready during project_loading.
 		"""
 		if drumkit_widget.ready():
+			drumkit_widget.sig_inst_toggle.connect(self.slot_inst_toggle)
+			drumkit_widget.sig_remove_drumkit.connect(self.slot_remove_drumkit)
 			if self.project_loading:
 				drumkit_widget.apply_selections(self.project_definition[drumkit_widget.sfz_filename])
 				if all(drumkit_widget.ready() for drumkit_widget in self.drumkit_widgets):
@@ -437,8 +452,6 @@ class MainWindow(QMainWindow):
 					drumkit_widget.select_all()
 					self.midi_splitter.assign_all_notes(drumkit_widget.port_number)
 				self.set_dirty()
-			drumkit_widget.sig_inst_toggle.connect(self.slot_inst_toggle)
-			drumkit_widget.sig_remove_drumkit.connect(self.slot_remove_drumkit)
 
 	@pyqtSlot(QObject)
 	def slot_remove_drumkit(self, drumkit_widget):
@@ -458,10 +471,10 @@ class MainWindow(QMainWindow):
 		"""
 		Triggered by DrumkitWidget InstrumentButton toggle event.
 		Parameters are:
-			"source_widget": DrumkitWidget containing button clicked
-			"inst_id": From the button that was clicked
-			"state": (bool) True if "checked"
-			"ctrl_state": (bool) True if CTRL key pressed when clicking
+			"source_widget": DrumkitWidget containing the button clicked
+			"inst_id":       (str)  Identifies the button clicked
+			"state":         (bool) True if "checked"
+			"ctrl_state":    (bool) True if CTRL key pressed when clicking
 		"""
 		# Deselect all other InstrumentButton if not CTRL key pressed:
 		if state:
@@ -667,7 +680,7 @@ class MainWindow(QMainWindow):
 		)
 		if filename == '':
 			return
-		self.project_filename = filename
+		self.project_filename = os.path.realpath(filename)
 		self.save_project()
 
 	@pyqtSlot()
@@ -835,6 +848,7 @@ class FileSaveDialog(QFileDialog):
 # main()
 
 def main():
+	global app
 
 	p = argparse.ArgumentParser()
 	p.epilog = """

@@ -102,7 +102,7 @@ class DrumkitWidget(QFrame):
 
 	def ready(self):
 		"""
-		Returns "True" if this DrumkitWidget is setup with synth ports and bashed kit.
+		Returns "True" if this DrumkitWidget has a synth assigned and a bashed kit.
 		"""
 		return not self.synth is None and not self.drumkit is None
 
