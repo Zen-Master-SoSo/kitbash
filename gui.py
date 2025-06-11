@@ -180,8 +180,9 @@ class MainWindow(QMainWindow):
 	# Project loading / saving:
 
 	def set_dirty(self, state = True):
-		self.dirty = state
-		self.update_ui()
+		if not self.project_loading:
+			self.dirty = state
+			self.update_ui()
 
 	def compile_project_def(self):
 		return {
@@ -190,7 +191,7 @@ class MainWindow(QMainWindow):
 		}
 
 	def load_recent_project(self, filename):
-		if self.permission_to_clear():
+		if self.okay_to_clear():
 			self.load_project(filename)
 
 	def load_project(self, filename):
@@ -232,7 +233,7 @@ class MainWindow(QMainWindow):
 		settings().setValue("recent_project_folder", os.path.dirname(self.project_filename))
 		settings().setValue("recent_projects", self.recent_projects.items)
 
-	def permission_to_clear(self):
+	def okay_to_clear(self):
 		if not self.dirty:
 			return True
 		dlg = QMessageBox(
@@ -243,19 +244,41 @@ class MainWindow(QMainWindow):
 			self
 		)
 		ret = dlg.exec()
-		if ret == QMessageBox.Save:
-			self.slot_save_project()
-			return True
 		if ret == QMessageBox.Cancel:
 			return False
-		else:
-			return True
+		if ret == QMessageBox.Save:
+			self.slot_save_project()
+		return True
 
 	def clear(self):
 		self.project_filename = None
 		for widget in reversed(self.drumkit_widgets):
 			self.slot_remove_drumkit(widget)
 		self.set_dirty(False)
+
+	# -----------------------------------------------------------------
+	# Quit / close / signals
+
+	def closeEvent(self, event):
+		"""
+		PyQt closeEvent overload.
+		"""
+		if self.okay_to_clear():
+			self.synth.quit()
+			for drumkit_widget in self.drumkit_widgets:
+				drumkit_widget.synth.quit()
+			settings().setValue("geometry/MainWindow", self.saveGeometry())
+			logging.debug('Total %d xruns', self.current_xruns)
+			event.accept()
+		else:
+			event.ignore()
+
+	def system_signal(self, *_):
+		"""
+		Catch system signals SIGINT and SIGTERM
+		"""
+		logging.debug('Caught signal - shutting down')
+		self.close()
 
 	# -----------------------------------------------------------------
 	# Source / sink combo boxes
@@ -535,28 +558,6 @@ class MainWindow(QMainWindow):
 		return list(self.drumkit_port_ranges ^ self.used_port_numbers())
 
 	# -----------------------------------------------------------------
-	# Quit / close / signals
-
-	def closeEvent(self, event):
-		"""
-		PyQt closeEvent overload.
-		"""
-		logging.debug('MainWindow close()')
-		self.synth.quit()
-		for drumkit_widget in self.drumkit_widgets:
-			drumkit_widget.synth.quit()
-		settings().setValue("geometry/MainWindow", self.saveGeometry())
-		logging.debug('Total %d xruns', self.current_xruns)
-		event.accept()
-
-	def system_signal(self, *_):
-		"""
-		Catch system signals SIGINT and SIGTERM
-		"""
-		logging.debug('Caught signal - shutting down')
-		self.close()
-
-	# -----------------------------------------------------------------
 	# UI handling slots:
 
 	@pyqtSlot()
@@ -634,7 +635,7 @@ class MainWindow(QMainWindow):
 		"""
 		Triggered by "File -> New"
 		"""
-		if self.permission_to_clear():
+		if self.okay_to_clear():
 			self.clear()
 
 	@pyqtSlot()
@@ -642,7 +643,7 @@ class MainWindow(QMainWindow):
 		"""
 		Triggered by "File -> Open Project"
 		"""
-		if self.permission_to_clear():
+		if self.okay_to_clear():
 			QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, False)
 			filename = QFileDialog.getOpenFileName(self,
 				"Open saved project",
