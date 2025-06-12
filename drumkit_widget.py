@@ -41,8 +41,6 @@ class DrumkitWidget(QFrame):
 		self.port_number = None
 
 		self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
-		self.setFrameStyle(QFrame.Panel)
-		self.setFrameShadow(QFrame.Sunken)
 		self.setObjectName('drumkit_widget')
 
 		main_layout = QVBoxLayout()
@@ -141,13 +139,17 @@ class DrumkitWidget(QFrame):
 		for inst_button in group_frame.findChildren(InstrumentButton):
 			inst_button.setChecked(group_button.isChecked())
 
+	@pyqtSlot(int)
+	def slot_velocity_change(self, velocity):
+		self.velocity = velocity
+
 	@pyqtSlot(PercussionInstrument)
 	def slot_instrument_pressed(self, inst):
 		"""
 		Triggered by InstrumentButton mouse press.
 		Sends a "noteon" to this widget's synth.
 		"""
-		self.synth.noteon(0, inst.pitch, 120)
+		self.synth.noteon(0, inst.pitch, self.velocity)
 
 	@pyqtSlot(PercussionInstrument)
 	def slot_instrument_released(self, inst):
@@ -251,16 +253,16 @@ class DrumkitWidget(QFrame):
 				for button in self.findChildren(InstrumentButton) \
 				if button.isChecked() ]
 
-	def select_all(self):
+	@pyqtSlot()
+	def slot_select_all(self):
 		"""
-		Select all instruments - does not trigger signals.
+		Select all instruments.
+		Triggered by kits_area context menu.
 		Called when this is the first DrumkitWidget added to a project.
 		"""
 		for type_ in [GroupButton, InstrumentButton]:
-			buttons = self.findChildren(type_)
-			with SigBlock(* buttons):
-				for button in buttons:
-					button.setChecked(True)
+			for button in self.findChildren(type_):
+				button.setChecked(True)
 		self.update_count()
 
 	def saved_selections(self):

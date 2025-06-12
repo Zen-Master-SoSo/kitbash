@@ -38,6 +38,9 @@ QScrollBar:sub-line {
 	border: 1px solid #BFC6D6;
 }
 
+DrumkitWidget {
+	margin: 4px;
+}
 
 DrumkitWidget QLabel {
 	color: #666;
@@ -47,10 +50,6 @@ DrumkitWidget QLabel {
 
 DrumkitWidget QPushButton:disabled {
 	color: #888;
-}
-
-DrumkitWidget QPushButton:checked {
-	background-color: #E6E6FA;
 }
 
 DrumkitWidget TitleFrame {
@@ -69,13 +68,51 @@ DrumkitWidget QPushButton {
 }
 
 DrumkitWidget GroupButton {
+	padding: 1.5px 7px;
 	font-weight: bold;
-	font-size: 10pt;
+	font-size: 13px;
+}
+
+DrumkitWidget GroupButton:checked {
+	background-color: #FFF5CF;
 }
 
 DrumkitWidget InstrumentButton {
-	font-size: 8pt;
+	border: none;
+	margin: 1px;
+	padding: 2px;
+	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #FAFAFA, stop:1 #E8E8E8);
 }
+
+DrumkitWidget InstrumentButton:pressed {
+	background: #FABC48;
+}
+
+DrumkitWidget InstrumentButton:checked {
+	background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #D9D9D9, stop:0.4 #EDEDED, stop:0.7 #F0F0F0, stop:1 #FCFCFC);
+}
+
+DrumkitWidget InstrumentButton QLabel {
+	font-size: 11px;
+}
+
+DrumkitWidget InstrumentButton QCheckBox {
+	padding: 0 1px;
+}
+
+DrumkitWidget InstrumentButton QCheckBox::indicator {
+	border-width: 1px;
+	border-style: solid;
+	border-color: #FFFFFF;
+	background: #FFFFFF;
+}
+
+DrumkitWidget InstrumentButton QCheckBox::indicator:checked {
+	border-color: #705527;
+	background: #FFF9C3;
+}
+
+
 
 
 #frm_beats,

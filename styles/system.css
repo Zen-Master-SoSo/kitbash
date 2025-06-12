@@ -13,6 +13,11 @@
 	background: #7F7F7F;
 }
 
+
+DrumkitWidget {
+	margin: 2px;
+}
+
 DrumkitWidget GroupFrame {
 	margin-right: 1px;
 }
