@@ -3,14 +3,17 @@
 #  Copyright 2025 liyang <liyang@veronica>
 #
 import os, sys, logging
+from functools import lru_cache
 #import filecmp
 
 from PyQt5 import 			uic
-from PyQt5.QtCore import	Qt, pyqtSlot, QDir, QModelIndex
+from PyQt5.QtCore import	Qt, pyqtSlot, QPoint, QDir, QModelIndex, QDirIterator, QItemSelection
 from PyQt5.QtGui import		QColor, QIcon
-from PyQt5.QtWidgets import	QDialog, QListWidgetItem, QFileSystemModel
+from PyQt5.QtWidgets import	QDialog, QListWidget, QListWidgetItem, QFileSystemModel, \
+							QMenu, QApplication
 
 import soundfile as sf
+from midi_notes import Note, MIDI_DRUM_PITCHES, MIDI_DRUM_NAMES, MIDI_DRUM_IDS
 from jack_audio_player import JackAudioPlayer
 from qt_extras import ShutUpQT
 
@@ -29,57 +32,137 @@ class SamplesExplorer(QDialog, GeometrySaver):
 		self.restore_geometry()
 		self.finished.connect(self.save_geometry)
 		self.player = JackAudioPlayer()
-		self.current_drumkit = None
 		root_path = settings().value(KEY_SAMPLE_XPLORE_ROOT, QDir.homePath())
 		current_path = settings().value(KEY_SAMPLE_XPLORE_CURR, QDir.homePath())
-		self.lbl_selection.setText(current_path)
-		self.directory_model = QFileSystemModel()
-		self.directory_model.setRootPath(root_path)
-		self.directory_model.setNameFilters(['*.sfz'])
-		self.tree_files.setModel(self.directory_model)
+		self.files_model = QFileSystemModel()
+		self.files_model.setRootPath(root_path)
+		self.files_model.setNameFilters(['*.sfz'])
+		self.tree_files.setModel(self.files_model)
 		self.tree_files.hideColumn(1)
 		self.tree_files.hideColumn(2)
 		self.tree_files.hideColumn(3)
-		self.tree_files.setRootIndex(self.directory_model.index(root_path))
-		index = self.directory_model.index(current_path)
+		self.tree_files.setRootIndex(self.files_model.index(root_path))
+		index = self.files_model.index(current_path)
 		self.tree_files.setCurrentIndex(index)
 		self.tree_files.scrollTo(index, 1)
-		self.tree_files.selectionModel().currentChanged.connect(self.slot_tree_current_changed)
+		for pitch, inst_id in MIDI_DRUM_IDS.items():
+			list_item = QListWidgetItem(self.lst_instruments)
+			list_item.setData(Qt.UserRole, inst_id)
+			list_item.setText(MIDI_DRUM_NAMES[pitch])
+		self.instrument_list_ids = [
+			list_item.data(Qt.UserRole) \
+			for list_item in self.iterate_instrument_list()
+		]
+		self.instrument_list_drumkit_paths = [
+			[] for row in range(self.lst_instruments.count())
+		]
+		self.reset_instrument_selections()
+		# Connect signals
+		self.tree_files.selectionModel().selectionChanged.connect(self.slot_tree_selection_changed)
+		self.tree_files.setContextMenuPolicy(Qt.CustomContextMenu)
+		self.tree_files.customContextMenuRequested.connect(self.slot_files_context_menu)
 		self.lst_instruments.currentItemChanged.connect(self.slot_inst_current_changed)
 		self.lst_samples.itemPressed.connect(self.slot_sample_pressed)
+		self.lst_samples.mouseReleaseEvent = self.samples_mouse_release
+		self.lst_samples.setContextMenuPolicy(Qt.CustomContextMenu)
+		self.lst_samples.customContextMenuRequested.connect(self.slot_samples_context_menu)
+		# Populate samples, if applicable
+		#self.slot_tree_selection_changed(index)
 
-	@pyqtSlot(QModelIndex)
-	def slot_tree_current_changed(self, index):
-		path = self.directory_model.filePath(index)
-		self.lbl_selection.setText(path)
-		if self.directory_model.isDir(index):
-			settings().setValue(KEY_SAMPLE_XPLORE_CURR, path)
-		else:
-			self.current_drumkit = Drumkit(path)
-			self.lst_instruments.clear()
-			self.lst_samples.clear()
-			for inst in self.current_drumkit.instruments():
-				list_item = QListWidgetItem(self.lst_instruments)
-				list_item.setText(inst.name)
-				list_item.setData(Qt.UserRole, inst)
+	def iterate_instrument_list(self):
+		for row in range(self.lst_instruments.count()):
+			yield self.lst_instruments.item(row)
+
+	@lru_cache
+	def drumkit(self, path):
+		return Drumkit(path)
+
+	@pyqtSlot(QPoint)
+	def slot_files_context_menu(self, position):
+		indexes = self.tree_files.selectedIndexes()
+		if len(indexes):
+			menu = QMenu(self)
+			menu.addAction('Copy path' if len(indexes) == 1 else 'Copy paths')
+			if menu.exec(self.tree_files.mapToGlobal(position)):
+				QApplication.instance().clipboard().setText("\n".join(
+					self.files_model.filePath(index) for index in indexes
+				))
+
+	def reset_instrument_selections(self):
+		for row in range(self.lst_instruments.count()):
+			self.lst_instruments.item(row).setFlags(Qt.NoItemFlags)
+			self.instrument_list_drumkit_paths[row] = []
+
+	@pyqtSlot(QItemSelection, QItemSelection)
+	def slot_tree_selection_changed(self, selected, deselected):
+		QApplication.setOverrideCursor(Qt.WaitCursor)
+		self.lst_samples.clear()
+		self.reset_instrument_selections()
+		indexes = self.tree_files.selectedIndexes()
+		for index in indexes:
+			path = self.files_model.filePath(index)
+			if self.files_model.isDir(index):
+				settings().setValue(KEY_SAMPLE_XPLORE_CURR, path)
+			else:
+				settings().setValue(KEY_SAMPLE_XPLORE_CURR, os.path.dirname(path))
+				for inst in self.drumkit(path).instruments():
+					row = self.instrument_list_ids.index(inst.inst_id)
+					self.instrument_list_drumkit_paths[row].append(path)
+					self.lst_instruments.item(row).setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+		selected_items = self.lst_instruments.selectedItems()
+		if len(selected_items):
+			self.populate_samples(selected_items.pop())
+		QApplication.restoreOverrideCursor()
 
 	@pyqtSlot(QListWidgetItem, QListWidgetItem)
 	def slot_inst_current_changed(self, list_item, previous):
 		if list_item:
-			inst = list_item.data(Qt.UserRole)
-			self.lst_samples.clear()
-			for sample in inst.samples():
+			self.populate_samples(list_item)
+
+	def populate_samples(self, list_item):
+		self.lst_samples.clear()
+		inst_id = list_item.data(Qt.UserRole)
+		row = self.lst_instruments.row(list_item)
+		for path in self.instrument_list_drumkit_paths[row]:
+			for sample in self.drumkit(path).instrument(inst_id).samples():
+				existing_items = self.lst_samples.findItems(sample.basename, Qt.MatchExactly)
+				if len(existing_items):
+					for existing_item in existing_items:
+						if existing_item.data(Qt.UserRole).name == sample.abspath:
+							return
 				list_item = QListWidgetItem(self.lst_samples)
 				list_item.setText(sample.basename)
 				soundfile = sf.SoundFile(sample.abspath)
 				list_item.setData(Qt.UserRole, soundfile)
+				s_samp = soundfile.name + \
+					f'\nThis file has a sample rate of {soundfile.samplerate} Hz,\n'
 				if soundfile.samplerate != self.player.client.samplerate:
-					list_item.setIcon(QIcon.fromTheme('dialog-warning'))
+					list_item.setIcon(QIcon.fromTheme('face-sad'))
+					list_item.setToolTip(s_samp + \
+						f'while the JACK server is running at {self.player.client.samplerate} Hz')
+				else:
+					list_item.setIcon(QIcon.fromTheme('face-cool'))
+					list_item.setToolTip(s_samp + 'the same as the JACK server')
+
+	@pyqtSlot(QPoint)
+	def slot_samples_context_menu(self, position):
+		list_item = self.lst_samples.currentItem()
+		if list_item is not None:
+			menu = QMenu(self)
+			menu.addAction('Copy path')
+			if menu.exec(self.lst_samples.mapToGlobal(position)):
+				QApplication.instance().clipboard().setText(list_item.data(Qt.UserRole).name)
 
 	@pyqtSlot(QListWidgetItem)
 	def slot_sample_pressed(self, list_item):
 		soundfile = list_item.data(Qt.UserRole)
+		soundfile.seek(0)
 		self.player.play_python_soundfile(soundfile)
+
+	def samples_mouse_release(self, event):
+		self.player.stop()
+		super(QListWidget, self.lst_samples).mouseReleaseEvent(event)
+
 
 if __name__ == "__main__":
 	from PyQt5.QtWidgets import QApplication
