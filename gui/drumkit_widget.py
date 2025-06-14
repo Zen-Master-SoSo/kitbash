@@ -1,6 +1,6 @@
-#  kitbash/drumkit_widget.py
+#  kitbash/gui/drumkit_widget.py
 #
-#  Copyright 2024 liyang <liyang@veronica>
+#  Copyright 2025 liyang <liyang@veronica>
 #
 import logging
 from os.path import basename
@@ -416,4 +416,5 @@ class InstrumentLabel(QLabel):
 		self.parent().mouse_release()
 		event.accept()
 
-#  end kitbash/drumkit_widget.py
+
+#  end kitbash/gui/drumkit_widget.py

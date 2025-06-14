@@ -237,12 +237,12 @@
     <property name="title">
      <string>&amp;File</string>
     </property>
-    <widget class="QMenu" name="menu_RecentProject">
+    <widget class="QMenu" name="menu_recent_project">
      <property name="title">
       <string>&amp;Recent Projects ...</string>
      </property>
     </widget>
-    <widget class="QMenu" name="menu_RecentDrumkits">
+    <widget class="QMenu" name="menu_recent_drumkits">
      <property name="title">
       <string>Recent &amp;Drumkits</string>
      </property>
@@ -251,12 +251,12 @@
     <addaction name="action_open_project"/>
     <addaction name="action_save_project"/>
     <addaction name="action_save_project_as"/>
-    <addaction name="menu_RecentProject"/>
+    <addaction name="menu_recent_project"/>
     <addaction name="separator"/>
     <addaction name="action_save_bashed_kit"/>
     <addaction name="action_save_kit_as"/>
     <addaction name="separator"/>
-    <addaction name="menu_RecentDrumkits"/>
+    <addaction name="menu_recent_drumkits"/>
     <addaction name="separator"/>
     <addaction name="action_quit"/>
    </widget>
@@ -264,14 +264,14 @@
     <property name="title">
      <string>&amp;View</string>
     </property>
-    <widget class="QMenu" name="menu_Style">
+    <widget class="QMenu" name="menu_style">
      <property name="title">
       <string>St&amp;yle</string>
      </property>
     </widget>
     <addaction name="action_collapse_kits"/>
     <addaction name="separator"/>
-    <addaction name="menu_Style"/>
+    <addaction name="menu_style"/>
     <addaction name="action_reload_style"/>
    </widget>
    <widget class="QMenu" name="menu_Edit">

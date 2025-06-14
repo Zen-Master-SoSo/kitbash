@@ -1,8 +1,8 @@
-#  kitbash/gui.py
+#  kitbash/gui/main_window.py
 #
-#  Copyright 2024 liyang <liyang@veronica>
+#  Copyright 2025 liyang <liyang@veronica>
 #
-import sys, os, argparse, logging, json, glob
+import os, logging, json, glob
 from collections import deque
 from functools import partial
 from signal import signal, SIGINT, SIGTERM
@@ -11,7 +11,7 @@ from qt_extras import ShutUpQT, SigBlock, DevilBox
 from qt_extras.list_layout import VListLayout
 from midi_notes import MIDI_DRUM_PITCHES
 from liquiphy import LiquidSFZ
-from jack_connection_manager import JackConnectionManager, JackConnectError
+from jack_connection_manager import JackConnectionManager
 from jack_midi_split import MidiSplitter
 
 # PyQt5 imports
@@ -27,10 +27,15 @@ from kitbash import settings, APPLICATION_NAME, PACKAGE_DIR, \
 					SAMPLES_RESOLVE, SAMPLES_COPY, SAMPLES_SYMLINK, \
 					SAMPLES_HARDLINK, SAMPLES_ABSPATH
 from kitbash.drumkit import Drumkit
-from kitbash.drumkit_widget import DrumkitWidget
+from kitbash import styles, set_application_style, \
+					KEY_STYLE, KEY_SAMPLES_MODE, \
+					KEY_RECENT_DRUMKIT_FOLDER, KEY_RECENT_DRUMKITS, \
+					KEY_RECENT_PROJECT_FOLDER, KEY_RECENT_PROJECTS
+from kitbash.gui.drumkit_widget import DrumkitWidget
+from kitbash.gui import GeometrySaver
 
 
-class MainWindow(QMainWindow):
+class MainWindow(QMainWindow, GeometrySaver):
 
 	instance = None
 	options = None
@@ -46,14 +51,13 @@ class MainWindow(QMainWindow):
 			return
 		super().__init__()
 		self.options = options
+		set_application_style()
 		with ShutUpQT():
-			uic.loadUi(os.path.join(PACKAGE_DIR, 'res', 'main_window.ui'), self)
+			uic.loadUi(os.path.join(PACKAGE_DIR, 'gui', 'main_window.ui'), self)
 		self.setWindowIcon(QIcon(os.path.join(PACKAGE_DIR, 'res', 'kitbash-icon.png')))
-		geometry = settings().value("geometry/MainWindow", None)
-		if geometry is not None:
-			self.restoreGeometry(geometry)
-		self.recent_projects = RecentItemsList(settings().value("recent_projects", defaultValue=[]))
-		self.recent_drumkits = RecentItemsList(settings().value("recent_drumkits", defaultValue=[]))
+		self.restore_geometry()
+		self.recent_projects = RecentItemsList(settings().value(KEY_RECENT_PROJECTS, []))
+		self.recent_drumkits = RecentItemsList(settings().value(KEY_RECENT_DRUMKITS, []))
 		self.drumkit_port_ranges = set( port_number for port_number in range(16) )
 		self.synth_creation_queue = deque()
 		self.current_midi_source = None
@@ -62,7 +66,6 @@ class MainWindow(QMainWindow):
 		self.base_xruns = self.current_xruns = 0
 		self.b_xruns.setText('0')
 		self.fill_style_menu()
-		self.load_current_style()
 		self.setup_window_elements()
 		self.connect_actions()
 		self.clear()
@@ -107,9 +110,9 @@ class MainWindow(QMainWindow):
 		self.action_save_kit_as.triggered.connect(self.slot_save_kit_as)
 		self.action_add_drumkit.triggered.connect(self.slot_add_drumkit)
 		self.action_remove_all_kits.triggered.connect(self.slot_remove_all_kits)
-		self.action_reload_style.triggered.connect(self.load_current_style)
-		self.menu_RecentProject.aboutToShow.connect(self.slot_show_recent_projects)
-		self.menu_RecentDrumkits.aboutToShow.connect(self.slot_show_recent_drumkits)
+		self.action_reload_style.triggered.connect(self.slot_reload_style)
+		self.menu_recent_project.aboutToShow.connect(self.slot_show_recent_projects)
+		self.menu_recent_drumkits.aboutToShow.connect(self.slot_show_recent_drumkits)
 		self.kits_area.setContextMenuPolicy(Qt.CustomContextMenu)
 		self.kits_area.customContextMenuRequested.connect(self.slot_kits_context_menu)
 		self.b_copy_path.clicked.connect(self.slot_copy_kit_path)
@@ -137,37 +140,26 @@ class MainWindow(QMainWindow):
 
 	def fill_style_menu(self):
 		"""
-		Fill a style menu with the list of discovered styles
-		(see discover styles)
+		Fill the style menu with the list of discovered styles.
 		"""
-		self._styles = { os.path.splitext(os.path.basename(path))[0] : path \
-						for path in glob.glob(os.path.join(PACKAGE_DIR, 'styles', '*.css')) }
-		current_style = settings().value("style")
+		current_style = settings().value(KEY_STYLE)
 		actions = QActionGroup(self)
 		actions.setExclusive(True)
-		for style_name in self._styles:
+		for style_name in styles():
 			action = QAction(style_name, self)
 			action.triggered.connect(partial(self.select_style, style_name))
 			action.setCheckable(True)
 			action.setChecked(style_name == current_style)
 			actions.addAction(action)
-			self.menu_Style.addAction(action)
+			self.menu_style.addAction(action)
 
 	def select_style(self, style):
-		"""
-		Selects a named style and saves selection in settings.
-		"""
-		settings().setValue('style', style)
-		self.load_current_style()
+		settings().setValue(KEY_STYLE, style)
+		set_application_style()
 
-	@pyqtSlot(bool)
-	def load_current_style(self):
-		"""
-		Loads (or reloads) the current style defined in settings.
-		"""
-		style = settings().value("style", "system")
-		with open(self._styles[style], 'r') as cssfile:
-			QApplication.instance().setStyleSheet(cssfile.read())
+	@pyqtSlot()
+	def slot_reload_style(self):
+		set_application_style()
 
 	# -----------------------------------------------------------------
 	# Project loading / saving:
@@ -218,7 +210,7 @@ class MainWindow(QMainWindow):
 					self.load_drumkit(sfzfile)
 		else:
 			self.recent_projects.remove(filename)
-			settings().setValue("recent_projects", self.recent_projects.items)
+			settings().setValue(KEY_RECENT_PROJECTS, self.recent_projects.items)
 			DevilBox(f"Project not found: {filename}")
 
 	def save_project(self):
@@ -234,8 +226,8 @@ class MainWindow(QMainWindow):
 
 	def register_recent_project(self):
 		self.recent_projects.select(self.project_filename)
-		settings().setValue("recent_project_folder", os.path.dirname(self.project_filename))
-		settings().setValue("recent_projects", self.recent_projects.items)
+		settings().setValue(KEY_RECENT_PROJECT_FOLDER, os.path.dirname(self.project_filename))
+		settings().setValue(KEY_RECENT_PROJECTS, self.recent_projects.items)
 
 	def okay_to_clear(self):
 		if not self.dirty:
@@ -277,7 +269,7 @@ class MainWindow(QMainWindow):
 		if self.okay_to_clear():
 			for drumkit_widget in self.drumkit_widgets:
 				drumkit_widget.synth.quit()
-			settings().setValue("geometry/MainWindow", self.saveGeometry())
+			self.save_geometry()
 			logging.debug('Total %d xruns', self.current_xruns)
 			event.accept()
 		else:
@@ -430,7 +422,6 @@ class MainWindow(QMainWindow):
 		2. triggered by "Edit -> Load Drumkit" menu
 		3. triggered by kits_area custom context menu
 		"""
-		global app
 		if os.path.exists(filename):
 			drumkit_widget = DrumkitWidget(filename, self)
 			available_ports = self.available_port_numbers()
@@ -439,7 +430,7 @@ class MainWindow(QMainWindow):
 			else:
 				DevilBox('Not enough ports (Maximum 16)')
 			self.drumkit_widgets.append(drumkit_widget)
-			app.processEvents()
+			QApplication.instance().processEvents()
 			self.instantiate_synth(drumkit_widget)
 			worker = KitLoader(drumkit_widget)
 			worker.signals.sig_loaded.connect(drumkit_widget.slot_drumkit_loaded)
@@ -447,12 +438,12 @@ class MainWindow(QMainWindow):
 			self.background_threadpool.start(worker)
 			if not self.project_loading:
 				self.recent_drumkits.select(filename)
-				settings().setValue("recent_drumkit_folder", os.path.dirname(filename))
+				settings().setValue(KEY_RECENT_DRUMKIT_FOLDER, os.path.dirname(filename))
 		else:
 			self.recent_drumkits.remove(filename)
 			DevilBox(f"File not found: {filename}")
 		if not self.project_loading:
-			settings().setValue("recent_drumkits", self.recent_drumkits.items)
+			settings().setValue(KEY_RECENT_DRUMKITS, self.recent_drumkits.items)
 
 	@pyqtSlot(DrumkitWidget)
 	def slot_drumkit_widget_loaded(self, drumkit_widget):
@@ -475,7 +466,8 @@ class MainWindow(QMainWindow):
 			drumkit_widget.velocity = self.spn_velocity.value()
 			self.spn_velocity.valueChanged.connect(drumkit_widget.slot_velocity_change)
 			if self.project_loading:
-				drumkit_widget.apply_selections(self.project_definition['drumkits'][drumkit_widget.sfz_filename])
+				drumkit_widget.apply_selections(
+					self.project_definition['drumkits'][drumkit_widget.sfz_filename])
 				if all(drumkit_widget.ready() for drumkit_widget in self.drumkit_widgets):
 					self.project_loading = False
 					self.update_ui()
@@ -610,26 +602,26 @@ class MainWindow(QMainWindow):
 		"""
 		Fills "recent_drumkits" menu before expanding
 		"""
-		self.menu_RecentDrumkits.clear()
+		self.menu_recent_drumkits.clear()
 		actions = []
 		for filename in self.recent_drumkits:
 			action = QAction(filename, self)
 			action.triggered.connect(partial(self.load_drumkit, filename))
 			actions.append(action)
-		self.menu_RecentDrumkits.addActions(actions)
+		self.menu_recent_drumkits.addActions(actions)
 
 	@pyqtSlot()
 	def slot_show_recent_projects(self):
 		"""
 		Fills "recent_projects" menu before expanding
 		"""
-		self.menu_RecentProject.clear()
+		self.menu_recent_project.clear()
 		actions = []
 		for filename in self.recent_projects:
 			action = QAction(filename, self)
 			action.triggered.connect(partial(self.load_recent_project, filename))
 			actions.append(action)
-		self.menu_RecentProject.addActions(actions)
+		self.menu_recent_project.addActions(actions)
 
 	@pyqtSlot()
 	def slot_new_project(self):
@@ -648,7 +640,7 @@ class MainWindow(QMainWindow):
 			QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, False)
 			filename = QFileDialog.getOpenFileName(self,
 				"Open saved project",
-				settings().value("recent_project_folder", ""),
+				settings().value(KEY_RECENT_PROJECT_FOLDER, ""),
 				"Kitbash project (*.json)"
 			)[0]
 			if filename != '':
@@ -675,7 +667,7 @@ class MainWindow(QMainWindow):
 		filename, _ = QFileDialog.getSaveFileName(
 			self,
 			"Save Kitbash project ...",
-			settings().value("recent_project_folder", os.getcwd() \
+			settings().value(KEY_RECENT_PROJECT_FOLDER, os.getcwd() \
 				if self.project_filename is None \
 				else os.path.dirname(self.project_filename)),
 			"Kitbash project (*.json)"
@@ -701,7 +693,7 @@ class MainWindow(QMainWindow):
 		See also: slot_drumkit_bashed
 		"""
 		dlg = KitSaveDialog(self,
-			int(settings().value("save_as_samples_mode", SAMPLES_HARDLINK)) \
+			int(settings().value(KEY_SAMPLES_MODE, SAMPLES_HARDLINK)) \
 			if self.bashed_sfz_samples_mode is None \
 			else self.bashed_sfz_samples_mode)
 		if dlg.exec_() and dlg.selected_file:
@@ -718,7 +710,7 @@ class MainWindow(QMainWindow):
 		QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs, False)
 		filename = QFileDialog.getOpenFileName(self,
 			"Load Drumkit",
-			settings().value("recent_drumkit_folder", ''),
+			settings().value(KEY_RECENT_DRUMKIT_FOLDER, ''),
 			"SFZ file (*.sfz)"
 		)[0]
 		if filename != '':
@@ -726,7 +718,8 @@ class MainWindow(QMainWindow):
 
 	@pyqtSlot()
 	def slot_copy_kit_path(self):
-		app.clipboard().setText(self.lbl_bashed_sfz_filename.text())
+		QApplication.instance().clipboard().setText(self.lbl_bashed_sfz_filename.text())
+
 
 class KitWorkerSignals(QObject):
 	"""
@@ -787,7 +780,7 @@ class JackLiquidSFZ(LiquidSFZ):
 		super().__init__(filename, defer_start = True)
 
 
-class KitSaveDialog(QFileDialog):
+class KitSaveDialog(QFileDialog, GeometrySaver):
 	"""
 	Custom file dialog with added option for choosing samples_mode.
 	"""
@@ -796,9 +789,7 @@ class KitSaveDialog(QFileDialog):
 		QCoreApplication.setAttribute(Qt.AA_DontUseNativeDialogs)
 		super().__init__(parent)
 		self.samples_mode = samples_mode
-		geometry = settings().value("geometry/KitSaveDialog", None)
-		if geometry is not None:
-			self.restoreGeometry(geometry)
+		self.restore_geometry()
 		self.setWindowTitle("Save bashed kit as .sfz")
 		self.setFileMode(QFileDialog.AnyFile)
 		self.setViewMode(QFileDialog.List)
@@ -848,7 +839,7 @@ class KitSaveDialog(QFileDialog):
 		"""
 		Overloaded function saves preferred mode, sets "selected_file".
 		"""
-		settings().setValue("save_as_samples_mode", self.samples_mode)
+		settings().setValue(KEY_SAMPLES_MODE, self.samples_mode)
 		selected_files = self.selectedFiles()
 		if selected_files:
 			self.selected_file = os.path.realpath(
@@ -863,60 +854,8 @@ class KitSaveDialog(QFileDialog):
 		"""
 		Overloaded function saves geometry.
 		"""
-		settings().setValue("geometry/KitSaveDialog", self.saveGeometry())
+		self.save_geometry()
 		super().done(result)
 
-# -----------------------------------------------------------------
-# main()
 
-def main():
-	global app
-
-	p = argparse.ArgumentParser()
-	p.epilog = """
-	Write your help text!
-	"""
-	p.add_argument('Filename', type=str, nargs='?', help='SFZ file[s] to include at startup')
-	p.add_argument("--log-file", "-l", type=str, help="Log to this file")
-	p.add_argument("--verbose", "-v", action="store_true", help="Show more detailed debug information")
-	options = p.parse_args()
-
-	log_level = logging.DEBUG if options.verbose else logging.ERROR
-	log_format = "[%(filename)24s:%(lineno)4d] %(levelname)-8s %(message)s"
-	if options.log_file:
-		logging.basicConfig(
-			filename = options.log_file,
-			filemode = 'w',
-			level = log_level,
-			format = log_format
-		)
-	else:
-		logging.basicConfig(
-			level = log_level,
-			format = log_format
-		)
-
-	#-----------------------------------------------------------------------
-	# Annoyance fix per:
-	# https://stackoverflow.com/questions/986964/qt-session-management-error
-	try:
-		del os.environ['SESSION_MANAGER']
-	except KeyError:
-		pass
-	#-----------------------------------------------------------------------
-
-	app = QApplication([])
-	try:
-		main_window = MainWindow(options)
-	except JackConnectError:
-		DevilBox('Could not connect to JACK server. Is it running?')
-		sys.exit(1)
-	main_window.show()
-	sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-	sys.exit(main())
-
-
-#  end kitbash/gui.py
+#  end kitbash/gui/main_window.py
