@@ -4,16 +4,15 @@
 #
 import os, sys, logging
 from functools import lru_cache
-#import filecmp
 
 from PyQt5 import 			uic
-from PyQt5.QtCore import	Qt, pyqtSlot, QPoint, QDir, QModelIndex, QDirIterator, QItemSelection
-from PyQt5.QtGui import		QColor, QIcon
+from PyQt5.QtCore import	Qt, pyqtSlot, QPoint, QDir, QItemSelection
+from PyQt5.QtGui import		QIcon
 from PyQt5.QtWidgets import	QDialog, QListWidget, QListWidgetItem, QFileSystemModel, \
 							QMenu, QApplication
 
 import soundfile as sf
-from midi_notes import Note, MIDI_DRUM_PITCHES, MIDI_DRUM_NAMES, MIDI_DRUM_IDS
+from midi_notes import MIDI_DRUM_NAMES, MIDI_DRUM_IDS
 from jack_audio_player import JackAudioPlayer
 from qt_extras import ShutUpQT
 
@@ -94,7 +93,7 @@ class SamplesExplorer(QDialog, GeometrySaver):
 			self.instrument_list_drumkit_paths[row] = []
 
 	@pyqtSlot(QItemSelection, QItemSelection)
-	def slot_tree_selection_changed(self, selected, deselected):
+	def slot_tree_selection_changed(self, *_):
 		QApplication.setOverrideCursor(Qt.WaitCursor)
 		self.lst_samples.clear()
 		self.reset_instrument_selections()
@@ -115,7 +114,7 @@ class SamplesExplorer(QDialog, GeometrySaver):
 		QApplication.restoreOverrideCursor()
 
 	@pyqtSlot(QListWidgetItem, QListWidgetItem)
-	def slot_inst_current_changed(self, list_item, previous):
+	def slot_inst_current_changed(self, list_item, _):
 		if list_item:
 			self.populate_samples(list_item)
 
@@ -165,7 +164,6 @@ class SamplesExplorer(QDialog, GeometrySaver):
 
 
 if __name__ == "__main__":
-	from PyQt5.QtWidgets import QApplication
 	logging.basicConfig(
 		stream = sys.stdout,
 		level = logging.DEBUG,

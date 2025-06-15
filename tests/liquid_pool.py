@@ -2,19 +2,14 @@
 #
 #  Copyright 2025 liyang <liyang@veronica>
 #
+"""
+Test used for confirming that instances of LiquidSFZ have their ports
+identified correctly.
+"""
 import logging
 from collections import deque
-from liquiphy import LiquidSFZ
-from jack_connection_manager import JackConnectionManager
-
-
-class JackLiquidSFZ(LiquidSFZ):
-
-	def __init__(self, filename):
-		self.client_name = None
-		self.midi_in_port = None
-		self.audio_out_ports = []
-		super().__init__(filename, defer_start = True)
+from jack_connection_manager import JackConnectionManager, JackConnectError
+from kitbash.gui.main_window import JackLiquidSFZ
 
 
 class LiquidPool():
@@ -60,12 +55,12 @@ class LiquidPool():
 	def on_port_registration(self, port, action):
 		if action and self.new_synth and self.new_synth.client_name in port.name:
 			if port.is_input and port.is_midi:
-				self.new_synth.midi_in_port = port
+				self.new_synth.input_port = port
 			elif port.is_output and port.is_audio:
-				self.new_synth.audio_out_ports.append(port)
+				self.new_synth.output_ports.append(port)
 			else:
 				logging.warning('Incorrect port type: %s', port)
-			if self.new_synth.midi_in_port and len(self.new_synth.audio_out_ports) == 2:
+			if self.new_synth.input_port and len(self.new_synth.output_ports) == 2:
 				logging.debug('%s ports complete', self.new_synth.client_name)
 				associated_object = self.queue.popleft()
 				associated_object.synth = self.new_synth
@@ -76,6 +71,9 @@ class LiquidPool():
 
 
 class FakeTarget():
+	"""
+	Emulates a DrumkitWidget
+	"""
 
 	ordinal = 0
 
@@ -91,7 +89,6 @@ class FakeTarget():
 
 if __name__ == "__main__":
 	import sys
-	from jack_connection_manager import JackConnectError
 
 	logging.basicConfig(
 		level = logging.DEBUG,

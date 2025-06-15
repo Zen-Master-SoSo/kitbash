@@ -2,16 +2,22 @@
 #
 #  Copyright 2025 liyang <liyang@veronica>
 #
+"""
+Test the KitSaveDialog.
+"""
 import sys
 from PyQt5.QtWidgets import QLabel, QPushButton, QMainWindow, QWidget, QVBoxLayout, \
 							QApplication, QShortcut
 from PyQt5.QtGui import QKeySequence
-from kitbash import 		SAMPLES_ABSPATH, SAMPLES_RESOLVE, SAMPLES_COPY, \
-							SAMPLES_SYMLINK, SAMPLES_HARDLINK
-from kitbash.gui import FileSaveDialog
+from kitbash import SAMPLES_ABSPATH, SAMPLES_RESOLVE, SAMPLES_COPY, \
+					SAMPLES_SYMLINK, SAMPLES_HARDLINK
+from kitbash.gui.main_window import KitSaveDialog
 
 
 class TestWindow(QMainWindow):
+	"""
+	Window used for testing KitSaveDialog.
+	"""
 
 	def __init__(self):
 		super().__init__()
@@ -31,7 +37,7 @@ class TestWindow(QMainWindow):
 		self.setWindowTitle("File Dialog Example")
 
 	def open_file_dialog(self):
-		dlg = FileSaveDialog(self)
+		dlg = KitSaveDialog(self, SAMPLES_SYMLINK)
 		if dlg.exec_():
 			if dlg.selected_file:
 				self.label.setText(f"Selected file: {dlg.selected_file}")

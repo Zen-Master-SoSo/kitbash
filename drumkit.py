@@ -128,11 +128,11 @@ class PercussionInstrument:
 		else:
 			# One region; select only key -related opstrings
 			region = self.regions[0]
-			group_opstrings = set([
+			group_opstrings = set(
 				str(region.opcodes[key]) \
 				for key in self.key_opcodes \
 				if key in region.opcodes
-			])
+			)
 		region_exclude = global_opstrings | group_opstrings
 		# Determine if we can replace 'lokey', 'hikey' and 'pitch_keycenter with 'key':
 		keyvals = [
@@ -398,7 +398,8 @@ class Drumkit:
 						sample.hardlink_to(target_sfz_dir, samples_path)
 				except FileExistsError:
 					pass
-		with open(filename + '.sfz' if ext == '' else filename, 'w') as fob:
+		with open(filename + '.sfz' if ext == '' else filename,
+			'w', encoding = 'utf-8') as fob:
 			self.write(fob)
 
 	def write(self, stream):
@@ -483,8 +484,7 @@ class Drumkit:
 		Generator function which yields every instrument.
 		"""
 		for group in self.groups.values():
-			for instrument in group.instruments.values():
-				yield instrument
+			yield from group.instruments.values()
 
 	def instrument_ids(self):
 		"""

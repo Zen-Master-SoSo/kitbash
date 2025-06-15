@@ -2,9 +2,17 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
+"""
+kitbash is a program you can use to combine parts of various drumkits into a
+new drumkit.
+
+All drumkits are .sfz -based. As of now, .sf2 and .gig files are not supported.
+
+"""
 import sys, os, argparse, logging, json, glob
 from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QApplication
+from qt_extras import DevilBox
 from jack_connection_manager import JackConnectError
 
 APPLICATION_NAME			= "kitbash"
@@ -16,7 +24,7 @@ SAMPLES_COPY				= 2
 SAMPLES_SYMLINK				= 3
 SAMPLES_HARDLINK			= 4
 KEY_STYLE					= 'Style'
-KEY_SAMPLES_MODE			= 'FileSaveDialog/SamplesMode'
+KEY_SAMPLES_MODE			= 'KitSaveDialog/SamplesMode'
 KEY_RECENT_DRUMKIT_FOLDER	= 'RecentDrumkitFolder'
 KEY_RECENT_DRUMKITS			= 'RecentDrumkits'
 KEY_RECENT_PROJECT_FOLDER	= 'RecentProjectFolder'
@@ -25,21 +33,21 @@ KEY_SAMPLE_XPLORE_ROOT		= 'SampleExplorerRoot'
 KEY_SAMPLE_XPLORE_CURR		= 'SampleExplorerCurrent'
 
 def settings():
-	if getattr(settings, '_cached_var', None) is None:
-		settings._cached_var = QSettings("ZenSoSo", APPLICATION_NAME)
-	return settings._cached_var
+	if getattr(settings, 'cached_var', None) is None:
+		settings.cached_var = QSettings("ZenSoSo", APPLICATION_NAME)
+	return settings.cached_var
 
 def styles():
-	if getattr(styles, '_cached_var', None) is None:
-		styles._cached_var = {
+	if getattr(styles, 'cached_var', None) is None:
+		styles.cached_var = {
 			os.path.splitext(os.path.basename(path))[0] : path \
 			for path in glob.glob(os.path.join(PACKAGE_DIR, 'styles', '*.css'))
 		}
-	return styles._cached_var
+	return styles.cached_var
 
 def set_application_style():
 	style = settings().value(KEY_STYLE, DEFAULT_STYLE)
-	with open(styles()[style], 'r') as cssfile:
+	with open(styles()[style], 'r', encoding = 'utf-8') as cssfile:
 		QApplication.instance().setStyleSheet(cssfile.read())
 
 def main():
