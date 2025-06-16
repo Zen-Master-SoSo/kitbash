@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import	QDialog, QListWidget, QListWidgetItem, QFileSystemMo
 
 import soundfile as sf
 from midi_notes import MIDI_DRUM_NAMES, MIDI_DRUM_IDS
+from jack import JackError
 from jack_audio_player import JackAudioPlayer
 from qt_extras import ShutUpQT
 
@@ -171,8 +172,14 @@ if __name__ == "__main__":
 	)
 	app = QApplication([])
 	set_application_style()
-	dialog = SamplesExplorer(None)
-	dialog.exec_()
+	try:
+		dialog = SamplesExplorer(None)
+	except JackError as err:
+		print('Could not connect to JACK server. Is it running?')
+		sys.exit(1)
+	else:
+		dialog.exec_()
+		sys.exit(0)
 
 
 #  end kitbash/gui/samples_explorer.py

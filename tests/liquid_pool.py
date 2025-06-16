@@ -98,7 +98,7 @@ if __name__ == "__main__":
 	try:
 		pool = LiquidPool()
 	except JackConnectError:
-		print('Could not connect to JACK server. Is it running?')
+		print('\nCould not connect to JACK server. Is it running?')
 		sys.exit(1)
 
 	targets = [ FakeTarget() for i in range(16) ]
