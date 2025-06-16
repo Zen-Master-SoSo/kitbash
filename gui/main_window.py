@@ -61,52 +61,45 @@ class DrumkitWidget(QFrame):
 		self.velocity = None
 
 		self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
-		self.setObjectName('drumkit_widget')
 
 		main_layout = QVBoxLayout()
 		main_layout.setContentsMargins(1,1,1,1)
 		main_layout.setSpacing(0)
 
-		frm_title = QFrame()
-		frm_title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-		frm_title.setObjectName('frm_title')
+		frm_top = QFrame()
+		frm_top.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+		frm_top.setObjectName('frm_top')
 
-		top_layout = QHBoxLayout()
-		top_layout.setContentsMargins(2,2,2,2)
-		top_layout.setSpacing(0)
+		lo_top = QHBoxLayout()
+		lo_top.setContentsMargins(2,2,2,2)
+		lo_top.setSpacing(0)
 
 		self.hide_button = QPushButton(self)
 		self.hide_button.setIcon(group_expanded_icon())
 		self.hide_button.setIconSize(QSize(16,16))
-		self.hide_button.setFixedWidth(20)
-		self.hide_button.setFixedHeight(20)
 		self.hide_button.setCheckable(True)
 		self.hide_button.toggled.connect(self.slot_hide)
-		top_layout.addWidget(self.hide_button)
-
-		self.lbl_audio_indicator = QLabel(self)
-		self.lbl_audio_indicator.setPixmap(audio_off_pixmap())
-		top_layout.addWidget(self.lbl_audio_indicator)
+		lo_top.addWidget(self.hide_button)
 
 		label = QLabel(self)
 		label.setText(self.sfz_filename)
-		top_layout.addWidget(label)
+		lo_top.addWidget(label)
 
 		self.lbl_use_count = QLabel(self)
 		self.lbl_use_count.setText('(0)')
-		top_layout.addWidget(self.lbl_use_count)
+		lo_top.addWidget(self.lbl_use_count)
 
-		top_layout.addStretch(20)
+		lo_top.addStretch(20)
 
 		remove_button = QPushButton(self)
 		remove_button.setIcon(remove_icon())
 		remove_button.setIconSize(QSize(16,16))
 		remove_button.clicked.connect(self.slot_remove_clicked)
-		top_layout.addWidget(remove_button)
+		lo_top.addWidget(remove_button)
 
-		frm_title.setLayout(top_layout)
+		frm_top.setLayout(lo_top)
 
-		main_layout.addWidget(frm_title)
+		main_layout.addWidget(frm_top)
 
 		self.frm_groups = QFrame(self)
 		self.frm_groups.setObjectName('frm_groups')
@@ -204,11 +197,9 @@ class DrumkitWidget(QFrame):
 		if state:
 			self.initial_height = self.height()
 			self.frm_groups.hide()
-			self.setFixedHeight(30)
 			self.hide_button.setIcon(group_hidden_icon())
 		else:
 			self.frm_groups.show()
-			self.setFixedHeight(self.initial_height)
 			self.hide_button.setIcon(group_expanded_icon())
 
 	def update_count(self):
@@ -218,7 +209,6 @@ class DrumkitWidget(QFrame):
 		"""
 		use_count = len([ b for b in self.frm_groups.findChildren(InstrumentButton) if b.isChecked() ])
 		self.lbl_use_count.setText('(%d)' % use_count)
-		self.lbl_audio_indicator.setPixmap(audio_on_pixmap() if bool(use_count) else audio_off_pixmap())
 		font = self.lbl_use_count.font()
 		font.setBold(bool(use_count))
 		self.lbl_use_count.setFont(font)
@@ -1192,7 +1182,7 @@ class InstrumentButton(QPushButton):
 		super().__init__(parent)
 		self.inst = inst
 		self.setObjectName(inst.inst_id)
-		self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
+		self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 		lo = QHBoxLayout()
 		lo.setContentsMargins(0,0,0,0)
 		lo.setSpacing(0)

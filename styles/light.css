@@ -52,11 +52,11 @@ DrumkitWidget QPushButton:disabled {
 	color: #888;
 }
 
-DrumkitWidget TitleFrame {
-	background-color: #F7F7FF;
+#frm_top {
+	background-color: #FAF5E6;
 }
 
-DrumkitWidget TitleFrame QLabel {
+#frm_top QLabel {
 }
 
 DrumkitWidget GroupFrame {
@@ -97,10 +97,12 @@ DrumkitWidget InstrumentButton QLabel {
 }
 
 DrumkitWidget InstrumentButton QCheckBox {
-	padding: 0 1px;
+	padding: 8px 2px;
 }
 
 DrumkitWidget InstrumentButton QCheckBox::indicator {
+	height: 8px;
+	width: 8px;
 	border-width: 1px;
 	border-style: solid;
 	border-color: #FFFFFF;
