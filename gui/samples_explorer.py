@@ -19,7 +19,7 @@ from qt_extras import ShutUpQT
 
 from kitbash import	settings, set_application_style, \
 					KEY_SAMPLE_XPLORE_ROOT, KEY_SAMPLE_XPLORE_CURR
-from kitbash.drumkit import Drumkit
+from kitbash.drumkits import Drumkit
 from kitbash.gui import GeometrySaver
 
 

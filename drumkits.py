@@ -1,12 +1,12 @@
-#  kitbash/drumkit.py
+#  kitbash/drumkits.py
 #
-#  Copyright 2024 liyang <liyang@veronica>
+#  Copyright 2025 liyang <liyang@veronica>
+#
 #
 """
-Provides percussion group / instrument oriented wrapper for SFZ classes.
-
-Notes:
-When importing
+Provides
+	Drumkit:    SFZ wrapper which allows import / copy operations
+	KitStarter: Constructs basic .SFZ from instrument defintions
 """
 from os import path
 from os import mkdir
@@ -33,6 +33,9 @@ def opstring_sorted(opstrings):
 		if op in OPCODE_SORT_ORDER else 1000
 	return sorted(opstrings, key = sort_val)
 
+
+# -----------------------------------------------------------------
+# Drumkit classes
 
 class Region(SFZRegion):
 	"""
@@ -532,4 +535,28 @@ class Drumkit:
 		return f"<Drumkit {self.name}>"
 
 
-#  end kitbash/drumkit.py
+# -----------------------------------------------------------------
+# KitStarter classes
+
+class KTInstrument:
+	"""
+	Contains basic instrument info which is compiled to .sfz opcodes.
+	"""
+
+	samples = []
+
+	def __init__(self, inst_id):
+		self.inst_id = inst_id
+
+
+class KitStarter:
+	"""
+	Allows you to construct an sfz file from a basic drumkit structure.
+	"""
+
+	def __init__(self):
+		self.instruments = { inst_id:KTInstrument(inst_id) \
+			for inst_id in MIDI_DRUM_IDS.values() }
+
+
+#  end kitbash/drumkits.py

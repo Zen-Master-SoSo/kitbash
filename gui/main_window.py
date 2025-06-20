@@ -29,7 +29,7 @@ from liquiphy import LiquidSFZ
 from jack_connection_manager import JackConnectionManager
 from jack_midi_split import MidiSplitter
 
-from kitbash.drumkit import Drumkit, PercussionInstrument
+from kitbash.drumkits import Drumkit, PercussionInstrument
 from kitbash.gui import group_expanded_icon, group_hidden_icon, remove_icon, \
 						audio_off_pixmap, audio_on_pixmap, \
 						GeometrySaver

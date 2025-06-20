@@ -9,7 +9,7 @@ import logging, argparse, sys, json
 from good_logging import log_error
 from kitbash import SAMPLES_RESOLVE, SAMPLES_COPY, SAMPLES_SYMLINK, \
 					SAMPLES_HARDLINK, SAMPLES_ABSPATH
-from kitbash.drumkit import Drumkit
+from kitbash.drumkits import Drumkit
 
 
 def main():

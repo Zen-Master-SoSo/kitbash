@@ -3,11 +3,8 @@
 #  Copyright 2024 liyang <liyang@veronica>
 #
 """
-kitbash is a program you can use to combine parts of various drumkits into a
-new drumkit.
-
-All drumkits are .sfz -based. As of now, .sf2 and .gig files are not supported.
-
+kitbash is a program you can use to combine parts of various SFZ files into a
+new SFZ with instruments "borrowed" from the originals.
 """
 import sys, os, argparse, logging, json, glob
 from PyQt5.QtCore import QSettings
