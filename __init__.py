@@ -26,8 +26,8 @@ KEY_RECENT_DRUMKIT_FOLDER	= 'RecentDrumkitFolder'
 KEY_RECENT_DRUMKITS			= 'RecentDrumkits'
 KEY_RECENT_PROJECT_FOLDER	= 'RecentProjectFolder'
 KEY_RECENT_PROJECTS			= 'RecentProjects'
-KEY_SAMPLE_XPLORE_ROOT		= 'SampleExplorerRoot'
-KEY_SAMPLE_XPLORE_CURR		= 'SampleExplorerCurrent'
+KEY_SAMPLE_XPLORE_ROOT		= 'SampleExplorer/Root'
+KEY_SAMPLE_XPLORE_CURR		= 'SampleExplorer/Current'
 
 def settings():
 	if getattr(settings, 'cached_var', None) is None:

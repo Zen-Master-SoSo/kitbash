@@ -16,10 +16,10 @@ from midi_notes import MIDI_DRUM_NAMES, MIDI_DRUM_IDS
 from jack import JackError
 from jack_audio_player import JackAudioPlayer
 from qt_extras import ShutUpQT
+from sfzen.drumkits import Drumkit
 
 from kitbash import	settings, set_application_style, \
 					KEY_SAMPLE_XPLORE_ROOT, KEY_SAMPLE_XPLORE_CURR
-from kitbash.drumkits import Drumkit
 from kitbash.gui import GeometrySaver
 
 

@@ -47,6 +47,8 @@ class GeometrySaver:
 
 	def restore_geometry(self):
 		if not hasattr(self, 'restoreGeometry'):
+			logging.error('Object of type %s has no "restoreGeometry" function',
+				type(self).__name__)
 			return
 		geometry = settings().value(self.__geometry_key())
 		if geometry is not None:
@@ -58,6 +60,8 @@ class GeometrySaver:
 
 	def save_geometry(self):
 		if not hasattr(self, 'saveGeometry'):
+			logging.error('Object of type %s has no "saveGeometry" function',
+				type(self).__name__)
 			return
 		settings().setValue(self.__geometry_key(), self.saveGeometry())
 		for splitter in self.findChildren(QSplitter):

@@ -28,10 +28,9 @@ from midi_notes import MIDI_DRUM_PITCHES
 from liquiphy import LiquidSFZ
 from jack_connection_manager import JackConnectionManager
 from jack_midi_split import MidiSplitter
+from sfzen.drumkits import Drumkit, PercussionInstrument
 
-from kitbash.drumkits import Drumkit, PercussionInstrument
 from kitbash.gui import group_expanded_icon, group_hidden_icon, remove_icon, \
-						audio_off_pixmap, audio_on_pixmap, \
 						GeometrySaver
 from kitbash import styles, set_application_style, settings, \
 					APPLICATION_NAME, PACKAGE_DIR, \
