@@ -8,8 +8,13 @@ Bash kit from the command line
 import logging, argparse, sys, json
 from good_logging import log_error
 from sfzen.drumkits import Drumkit
-from kitbash import SAMPLES_RESOLVE, SAMPLES_COPY, SAMPLES_SYMLINK, \
-					SAMPLES_HARDLINK, SAMPLES_ABSPATH
+from sfzen import (
+	SAMPLES_ABSPATH,
+	SAMPLES_RESOLVE,
+	SAMPLES_COPY,
+	SAMPLES_SYMLINK,
+	SAMPLES_HARDLINK
+)
 
 
 def main():

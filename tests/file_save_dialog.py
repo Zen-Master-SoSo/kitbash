@@ -9,8 +9,8 @@ import sys
 from PyQt5.QtWidgets import QLabel, QPushButton, QMainWindow, QWidget, QVBoxLayout, \
 							QApplication, QShortcut
 from PyQt5.QtGui import QKeySequence
-from sfzen.drumkits import	SAMPLES_ABSPATH, SAMPLES_RESOLVE, SAMPLES_COPY, \
-							SAMPLES_SYMLINK, SAMPLES_HARDLINK
+from sfzen import	SAMPLES_ABSPATH, SAMPLES_RESOLVE, SAMPLES_COPY, \
+					SAMPLES_SYMLINK, SAMPLES_HARDLINK
 from kitbash.gui.main_window import KitSaveDialog
 
 

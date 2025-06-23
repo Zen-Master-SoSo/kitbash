@@ -11,15 +11,17 @@ from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QApplication
 from qt_extras import DevilBox
 from jack_connection_manager import JackConnectError
+from sfzen import (
+	SAMPLES_ABSPATH,
+	SAMPLES_RESOLVE,
+	SAMPLES_COPY,
+	SAMPLES_SYMLINK,
+	SAMPLES_HARDLINK
+)
 
 APPLICATION_NAME			= "kitbash"
 PACKAGE_DIR					= os.path.dirname(__file__)
 DEFAULT_STYLE				= 'system'
-SAMPLES_ABSPATH				= 0
-SAMPLES_RESOLVE				= 1
-SAMPLES_COPY				= 2
-SAMPLES_SYMLINK				= 3
-SAMPLES_HARDLINK			= 4
 KEY_STYLE					= 'Style'
 KEY_SAMPLES_MODE			= 'KitSaveDialog/SamplesMode'
 KEY_RECENT_DRUMKIT_FOLDER	= 'RecentDrumkitFolder'

@@ -29,13 +29,13 @@ from liquiphy import LiquidSFZ
 from jack_connection_manager import JackConnectionManager
 from jack_midi_split import MidiSplitter
 from sfzen.drumkits import Drumkit, PercussionInstrument
+from sfzen import	SAMPLES_ABSPATH, SAMPLES_RESOLVE, SAMPLES_COPY, \
+					SAMPLES_SYMLINK, SAMPLES_HARDLINK
 
 from kitbash.gui import group_expanded_icon, group_hidden_icon, remove_icon, \
 						GeometrySaver
 from kitbash import styles, set_application_style, settings, \
 					APPLICATION_NAME, PACKAGE_DIR, \
-					SAMPLES_RESOLVE, SAMPLES_COPY, SAMPLES_SYMLINK, \
-					SAMPLES_HARDLINK, SAMPLES_ABSPATH, \
 					KEY_STYLE, KEY_SAMPLES_MODE, \
 					KEY_RECENT_DRUMKIT_FOLDER, KEY_RECENT_DRUMKITS, \
 					KEY_RECENT_PROJECT_FOLDER, KEY_RECENT_PROJECTS

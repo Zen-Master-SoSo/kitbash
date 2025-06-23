@@ -31,7 +31,7 @@ class SamplesExplorer(QDialog, GeometrySaver):
 			uic.loadUi(os.path.join(os.path.dirname(__file__), 'samples_explorer.ui'), self)
 		self.restore_geometry()
 		self.finished.connect(self.save_geometry)
-		self.player = JackAudioPlayer()
+		self.audio_player = JackAudioPlayer()
 		root_path = settings().value(KEY_SAMPLE_XPLORE_ROOT, QDir.homePath())
 		current_path = settings().value(KEY_SAMPLE_XPLORE_CURR, QDir.homePath())
 		self.files_model = QFileSystemModel()
@@ -136,10 +136,10 @@ class SamplesExplorer(QDialog, GeometrySaver):
 				list_item.setData(Qt.UserRole, soundfile)
 				s_samp = soundfile.name + \
 					f'\nThis file has a sample rate of {soundfile.samplerate} Hz,\n'
-				if soundfile.samplerate != self.player.client.samplerate:
+				if soundfile.samplerate != self.audio_player.client.samplerate:
 					list_item.setIcon(QIcon.fromTheme('face-sad'))
 					list_item.setToolTip(s_samp + \
-						f'while the JACK server is running at {self.player.client.samplerate} Hz')
+						f'while the JACK server is running at {self.audio_player.client.samplerate} Hz')
 				else:
 					list_item.setIcon(QIcon.fromTheme('face-cool'))
 					list_item.setToolTip(s_samp + 'the same as the JACK server')
@@ -155,12 +155,13 @@ class SamplesExplorer(QDialog, GeometrySaver):
 
 	@pyqtSlot(QListWidgetItem)
 	def slot_sample_pressed(self, list_item):
-		soundfile = list_item.data(Qt.UserRole)
-		soundfile.seek(0)
-		self.player.play_python_soundfile(soundfile)
+		if QApplication.mouseButtons() == Qt.LeftButton:
+			soundfile = list_item.data(Qt.UserRole)
+			soundfile.seek(0)
+			self.audio_player.play_python_soundfile(soundfile)
 
 	def samples_mouse_release(self, event):
-		self.player.stop()
+		self.audio_player.stop()
 		super(QListWidget, self.lst_samples).mouseReleaseEvent(event)
 
 
