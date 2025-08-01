@@ -26,7 +26,7 @@ from qt_extras.list_layout import VListLayout
 from recent_items_list import RecentItemsList
 from midi_notes import MIDI_DRUM_PITCHES
 from liquiphy import LiquidSFZ
-from jack_connection_manager import JackConnectionManager
+from conn_jack import JackConnectionManager
 from jack_midi_split import MidiSplitter
 from sfzen.drumkits import Drumkit, PercussionInstrument
 from sfzen import	SAMPLES_ABSPATH, SAMPLES_RESOLVE, SAMPLES_COPY, \

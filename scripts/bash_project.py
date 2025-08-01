@@ -6,7 +6,7 @@
 Bash kit from the command line
 """
 import logging, argparse, sys, json
-from good_logging import log_error
+from log_soso import log_error
 from sfzen.drumkits import Drumkit
 from sfzen import (
 	SAMPLES_ABSPATH,

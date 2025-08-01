@@ -8,7 +8,7 @@ identified correctly.
 """
 import logging
 from collections import deque
-from jack_connection_manager import JackConnectionManager, JackConnectError
+from conn_jack import JackConnectionManager, JackConnectError
 from kitbash.gui.main_window import JackLiquidSFZ
 
 

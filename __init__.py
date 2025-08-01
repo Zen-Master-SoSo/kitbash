@@ -10,7 +10,7 @@ import sys, os, argparse, logging, json, glob
 from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QApplication
 from qt_extras import DevilBox
-from jack_connection_manager import JackConnectError
+from conn_jack import JackConnectError
 from sfzen import (
 	SAMPLES_ABSPATH,
 	SAMPLES_RESOLVE,
