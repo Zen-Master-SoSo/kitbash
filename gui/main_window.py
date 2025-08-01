@@ -507,7 +507,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.background_threadpool.start(worker)
 
 	def register_recent_project(self):
-		self.recent_projects.select(self.project_filename)
+		self.recent_projects.bump(self.project_filename)
 		settings().setValue(KEY_RECENT_PROJECT_FOLDER, dirname(self.project_filename))
 		settings().setValue(KEY_RECENT_PROJECTS, self.recent_projects.items)
 
@@ -719,7 +719,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 			worker.signals.sig_widget_loaded.connect(self.slot_drumkit_widget_loaded)
 			self.background_threadpool.start(worker)
 			if not self.project_loading:
-				self.recent_drumkits.select(filename)
+				self.recent_drumkits.bump(filename)
 				settings().setValue(KEY_RECENT_DRUMKIT_FOLDER, dirname(filename))
 		else:
 			self.recent_drumkits.remove(filename)
