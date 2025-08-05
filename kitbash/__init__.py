@@ -2,11 +2,27 @@
 #
 #  Copyright 2024 liyang <liyang@veronica>
 #
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
+#
 """
 kitbash is a program you can use to combine parts of various SFZ files into a
 new SFZ with instruments "borrowed" from the originals.
 """
 import sys, os, argparse, logging, json, glob
+from functools import cache
 from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QApplication
 from qt_extras import DevilBox
@@ -18,6 +34,8 @@ from sfzen import (
 	SAMPLES_SYMLINK,
 	SAMPLES_HARDLINK
 )
+
+__version__ = "1.0.0"
 
 APPLICATION_NAME			= "kitbash"
 PACKAGE_DIR					= os.path.dirname(__file__)
@@ -31,18 +49,16 @@ KEY_RECENT_PROJECTS			= 'RecentProjects'
 KEY_SAMPLE_XPLORE_ROOT		= 'SampleExplorer/Root'
 KEY_SAMPLE_XPLORE_CURR		= 'SampleExplorer/Current'
 
+@cache
 def settings():
-	if getattr(settings, 'cached_var', None) is None:
-		settings.cached_var = QSettings("ZenSoSo", APPLICATION_NAME)
-	return settings.cached_var
+	return QSettings('ZenSoSo', 'kitbash')
 
+@cache
 def styles():
-	if getattr(styles, 'cached_var', None) is None:
-		styles.cached_var = {
-			os.path.splitext(os.path.basename(path))[0] : path \
-			for path in glob.glob(os.path.join(PACKAGE_DIR, 'styles', '*.css'))
-		}
-	return styles.cached_var
+	return {
+		os.path.splitext(os.path.basename(path))[0] : path \
+		for path in glob.glob(os.path.join(PACKAGE_DIR, 'styles', '*.css'))
+	}
 
 def set_application_style():
 	style = settings().value(KEY_STYLE, DEFAULT_STYLE)

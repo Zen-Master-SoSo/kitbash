@@ -1,0 +1,43 @@
+[project]
+name = "kitbash"
+authors = [{name = "Leon Dionne", email = "ldionne@dridesign.sh.cn"}]
+readme = "README.md"
+license = {file = "LICENSE"}
+classifiers = ["License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)"]
+dynamic = ["version", "description"]
+dependencies = [
+	"PyQt5",
+	"conn_jack",
+	"jack_audio_player",
+	"jack_midi_split",
+	"liquiphy",
+	"soundfile",
+	"sfzen",
+	"midi_notes",
+	"recent_items_list",
+	"soso_qt_extras >= 1.1.0"
+]
+
+[project.urls]
+Home = "https://github.com/Zen-Master-SoSo/kitbash"
+
+[project.scripts]
+kitbash = "kitbash:main"
+kitcmd = "kitbash.scripts.bash_project:main"
+
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[bumpver]
+current_version = "1.0.0"
+version_pattern = "MAJOR.MINOR.PATCH"
+commit_message = "Bump version {old_version} -> {new_version}"
+commit = true
+tag = false
+push = false
+
+[bumpver.file_patterns]
+"kitbash/__init__.py" = [
+    '^__version__ = "{version}"$',
+]
