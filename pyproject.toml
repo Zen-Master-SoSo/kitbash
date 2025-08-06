@@ -15,7 +15,7 @@ dependencies = [
 	"sfzen",
 	"midi_notes",
 	"recent_items_list",
-	"soso_qt_extras >= 1.1.0"
+	"soso_qt_extras >= 1.2.0"
 ]
 
 [project.urls]
