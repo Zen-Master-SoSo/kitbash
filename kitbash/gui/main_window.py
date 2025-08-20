@@ -12,7 +12,7 @@ from functools import partial
 from signal import signal, SIGINT, SIGTERM
 
 from PyQt5 import uic
-from PyQt5.QtCore import Qt, QObject, pyqtSignal, pyqtSlot, QSize, QTimer, \
+from PyQt5.QtCore import	Qt, QObject, pyqtSignal, pyqtSlot, QSize, QTimer, \
 							QThreadPool, QRunnable, QPoint, QCoreApplication
 from PyQt5.QtWidgets import QApplication, QLayout, QVBoxLayout, QHBoxLayout, \
 							QLabel, QFrame, QSizePolicy, QPushButton, QCheckBox, \
@@ -1117,6 +1117,7 @@ class KitSaveDialog(QFileDialog, GeometrySaver):
 		"""
 		self.samples_mode = mode
 
+	@pyqtSlot()
 	def accept(self):
 		"""
 		Overloaded function saves preferred mode, sets "selected_file".
@@ -1185,7 +1186,6 @@ class InstrumentButton(QPushButton):
 		lo = QHBoxLayout()
 		lo.setContentsMargins(0,0,0,0)
 		lo.setSpacing(0)
-		lo.setSizeConstraint(QLayout.SetMinimumSize)
 		self.setLayout(lo)
 		self.setCheckable(True)
 		lo.addWidget(InstrumentLabel(inst, self))
