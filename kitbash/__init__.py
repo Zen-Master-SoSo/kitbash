@@ -22,7 +22,10 @@ kitbash is a program you can use to combine parts of various SFZ files into a
 new SFZ with instruments "borrowed" from the originals.
 """
 import sys, os, argparse, logging, json, glob
-from functools import cache
+try:
+	from functools import cache
+except ImportError:
+	from functools import lru_cache as cache
 from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QApplication
 from qt_extras import DevilBox
