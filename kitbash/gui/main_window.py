@@ -14,7 +14,7 @@ from signal import signal, SIGINT, SIGTERM
 from PyQt5 import uic
 from PyQt5.QtCore import	Qt, QObject, pyqtSignal, pyqtSlot, QSize, QTimer, \
 							QThreadPool, QRunnable, QPoint, QCoreApplication
-from PyQt5.QtWidgets import QApplication, QLayout, QVBoxLayout, QHBoxLayout, \
+from PyQt5.QtWidgets import QApplication, QVBoxLayout, QHBoxLayout, \
 							QLabel, QFrame, QSizePolicy, QPushButton, QCheckBox, \
 							QMainWindow, QMessageBox, QFileDialog, \
 							QAction, QActionGroup, QMenu, \
@@ -975,7 +975,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		See also: slot_drumkit_bashed
 		"""
 		dlg = KitSaveDialog(self,
-			int(settings().value(KEY_SAMPLES_MODE, SAMPLES_HARDLINK)) \
+			int(settings().value(KEY_SAMPLES_MODE, SAMPLES_ABSPATH)) \
 			if self.bashed_sfz_samples_mode is None \
 			else self.bashed_sfz_samples_mode)
 		if dlg.exec_() and dlg.selected_file:

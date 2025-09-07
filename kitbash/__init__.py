@@ -30,13 +30,6 @@ from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QApplication
 from qt_extras import DevilBox
 from conn_jack import JackConnectError
-from sfzen import (
-	SAMPLES_ABSPATH,
-	SAMPLES_RESOLVE,
-	SAMPLES_COPY,
-	SAMPLES_SYMLINK,
-	SAMPLES_HARDLINK
-)
 
 __version__ = "1.0.0"
 
