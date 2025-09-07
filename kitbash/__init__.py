@@ -31,7 +31,7 @@ from PyQt5.QtWidgets import QApplication
 from qt_extras import DevilBox
 from conn_jack import JackConnectError
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 APPLICATION_NAME			= "kitbash"
 PACKAGE_DIR					= os.path.dirname(__file__)
