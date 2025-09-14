@@ -353,18 +353,14 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.clear()
 		# Setup background threadpool for KitLoader and KitBasher workers
 		self.background_threadpool = QThreadPool()
-		# Setup connection manager and synth creation pool
-		self.conn_man = JackConnectionManager()
-		self.conn_man.on_error(self.jack_error)
-		self.conn_man.on_xrun(self.jack_xrun)
-		self.conn_man.on_shutdown(self.jack_shutdown)
-		self.conn_man.on_client_registration(self.jack_client_registration)
-		self.conn_man.on_port_registration(self.jack_port_registration)
+		self.setup_conn_man()
 		# Fill sink/source menus:
 		self.fill_cmb_sources()
 		self.fill_cmb_sinks()
 		# Setup signals
-		self.sig_ports_complete.connect(self.slot_ports_complete)
+		# Note: sig_ports_complete is emitted from a JACK.Client process thread.
+		# That is why we force use of QueuedConnection between that signal and the main GUI thread.
+		self.sig_ports_complete.connect(self.slot_ports_complete, type = Qt.QueuedConnection)
 		self.cmb_midi_srcs.currentTextChanged.connect(self.slot_midi_src_changed)
 		self.cmb_audio_sinks.currentTextChanged.connect(self.slot_audio_sink_changed)
 		# Setup MidiSplitter
@@ -391,6 +387,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.action_save_bashed_kit.triggered.connect(self.slot_save_kit)
 		self.action_save_kit_as.triggered.connect(self.slot_save_kit_as)
 		self.action_add_drumkit.triggered.connect(self.slot_add_drumkit)
+		self.b_add_drumkit.clicked.connect(self.slot_add_drumkit)
 		self.action_remove_all_kits.triggered.connect(self.slot_remove_all_kits)
 		self.action_reload_style.triggered.connect(self.slot_reload_style)
 		self.menu_recent_project.aboutToShow.connect(self.slot_show_recent_projects)
@@ -399,6 +396,15 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.kits_area.customContextMenuRequested.connect(self.slot_kits_context_menu)
 		self.b_copy_path.clicked.connect(self.slot_copy_kit_path)
 		self.b_xruns.clicked.connect(self.slot_xruns_clicked)
+
+	def setup_conn_man(self):
+		# Setup JackConnectionManager
+		self.conn_man = JackConnectionManager()
+		self.conn_man.on_error(self.jack_error)
+		self.conn_man.on_xrun(self.jack_xrun)
+		self.conn_man.on_shutdown(self.jack_shutdown)
+		self.conn_man.on_client_registration(self.jack_client_registration)
+		self.conn_man.on_port_registration(self.jack_port_registration)
 
 	def update_ui(self):
 		title = APPLICATION_NAME \
@@ -411,6 +417,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.action_remove_all_kits.setEnabled(has_kits)
 		self.action_new_project.setEnabled(has_kits)
 		self.action_save_project.setEnabled(has_kits and self.dirty)
+		self.action_save_project_as.setEnabled(has_kits)
 		self.action_save_bashed_kit.setEnabled(has_kits)
 		self.b_save_kit.setEnabled(has_kits)
 		self.b_copy_path.setVisible(bool(self.bashed_sfz_filename))
@@ -549,6 +556,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		PyQt closeEvent overload.
 		"""
 		if self.okay_to_clear():
+			self.conn_man.close()
 			for drumkit_widget in self.drumkit_widgets:
 				drumkit_widget.synth.quit()
 			self.save_geometry()

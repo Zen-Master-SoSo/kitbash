@@ -53,12 +53,34 @@
            <verstretch>0</verstretch>
           </sizepolicy>
          </property>
+         <property name="toolTip">
+          <string>Save this bashed kit</string>
+         </property>
          <property name="text">
           <string/>
          </property>
          <property name="icon">
           <iconset theme="document-save">
            <normaloff>.</normaloff>.</iconset>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="b_add_drumkit">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Add an existing drumkit to the mix</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset theme="list-add"/>
          </property>
         </widget>
        </item>
@@ -70,6 +92,9 @@
            <height>0</height>
           </size>
          </property>
+         <property name="toolTip">
+          <string>Path to the current bashed kit</string>
+         </property>
          <property name="text">
           <string/>
          </property>
@@ -80,11 +105,15 @@
          <property name="enabled">
           <bool>true</bool>
          </property>
+         <property name="toolTip">
+          <string>Copy the path to the current bashed kit to the clipboard</string>
+         </property>
          <property name="text">
           <string/>
          </property>
          <property name="icon">
-          <iconset theme="edit-copy"/>
+          <iconset theme="edit-copy">
+           <normaloff>.</normaloff>.</iconset>
          </property>
         </widget>
        </item>
@@ -114,7 +143,11 @@
           </widget>
          </item>
          <item>
-          <widget class="QComboBox" name="cmb_midi_srcs"/>
+          <widget class="QComboBox" name="cmb_midi_srcs">
+           <property name="toolTip">
+            <string>Get MIDI input from this JACK client</string>
+           </property>
+          </widget>
          </item>
         </layout>
        </item>
@@ -131,7 +164,11 @@
           </widget>
          </item>
          <item>
-          <widget class="QComboBox" name="cmb_audio_sinks"/>
+          <widget class="QComboBox" name="cmb_audio_sinks">
+           <property name="toolTip">
+            <string>Send audio out to this JACK client</string>
+           </property>
+          </widget>
          </item>
         </layout>
        </item>
@@ -143,12 +180,15 @@
          <item>
           <widget class="QLabel" name="lbl3">
            <property name="text">
-            <string>Velocity:</string>
+            <string>Touch vel.:</string>
            </property>
           </widget>
          </item>
          <item>
           <widget class="QSpinBox" name="spn_velocity">
+           <property name="toolTip">
+            <string>Play instruments when clicked at this MIDI velocity</string>
+           </property>
            <property name="maximum">
             <number>127</number>
            </property>
@@ -178,6 +218,9 @@
              <width>42</width>
              <height>16777215</height>
             </size>
+           </property>
+           <property name="toolTip">
+            <string>JACK &quot;xruns&quot; - click to reset</string>
            </property>
            <property name="text">
             <string>0</string>
@@ -242,11 +285,6 @@
       <string>&amp;Recent Projects ...</string>
      </property>
     </widget>
-    <widget class="QMenu" name="menu_recent_drumkits">
-     <property name="title">
-      <string>Recent &amp;Drumkits</string>
-     </property>
-    </widget>
     <addaction name="action_new_project"/>
     <addaction name="action_open_project"/>
     <addaction name="action_save_project"/>
@@ -255,8 +293,6 @@
     <addaction name="separator"/>
     <addaction name="action_save_bashed_kit"/>
     <addaction name="action_save_kit_as"/>
-    <addaction name="separator"/>
-    <addaction name="menu_recent_drumkits"/>
     <addaction name="separator"/>
     <addaction name="action_quit"/>
    </widget>
@@ -278,7 +314,14 @@
     <property name="title">
      <string>&amp;Edit</string>
     </property>
+    <widget class="QMenu" name="menu_recent_drumkits">
+     <property name="title">
+      <string>Recent &amp;Drumkits</string>
+     </property>
+    </widget>
     <addaction name="action_add_drumkit"/>
+    <addaction name="menu_recent_drumkits"/>
+    <addaction name="separator"/>
     <addaction name="action_remove_all_kits"/>
    </widget>
    <addaction name="menu_File"/>
