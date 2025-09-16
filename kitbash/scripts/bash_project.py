@@ -32,6 +32,8 @@ def main():
 		help='Create symlinks in the "./samples" folder')
 	group.add_argument("--hardlink", "-l", action="store_true",
 		help='Hardlink samples in the "./samples" folder')
+	p.add_argument("--simplify", "-S", action="store_true",
+		help = 'Create <group> and <global> headers defining common opcodes.')
 	p.add_argument("--dry-run", "-n", action="store_true",
 		help="Do not make changes - just show what would be changed.")
 	p.add_argument("--verbose", "-v", action="store_true",
@@ -57,11 +59,13 @@ def main():
 	bashed_kit = Drumkit()
 	for source_file, groups in project_def['drumkits'].items():
 		src = Drumkit(source_file)
-		for group_settings in groups.values():
-			for inst_id, used in group_settings['instruments'].items():
+		for group in groups.values():
+			for inst_id, used in group['instruments'].items():
 				if used:
-					bashed_kit.import_instrument(inst_id, src)
+					bashed_kit.import_instrument(src.instrument(inst_id))
 
+	if options.simplify:
+		bashed_kit = bashed_kit.simplified()
 	if options.dry_run:
 		bashed_kit.write(sys.stdout)
 	else:

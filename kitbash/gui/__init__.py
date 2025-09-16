@@ -22,7 +22,7 @@ from functools import lru_cache
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QWidget, QSplitter
 from qt_extras import DevilBox
-from kitbash import PACKAGE_DIR, settings
+from kitbash import APP_PATH, settings
 
 
 AUDIO_ICON_SIZE = 16
@@ -33,11 +33,11 @@ def group_expanded_icon():
 	Defers loading of QPixmaps until a QGuiApplication is instantiated.
 	This is a Qt5 requirement.
 	"""
-	return QIcon(os.path.join(PACKAGE_DIR, 'res', 'group_expanded.svg'))
+	return QIcon(os.path.join(APP_PATH, 'res', 'group_expanded.svg'))
 
 @lru_cache
 def group_hidden_icon():
-	return QIcon(os.path.join(PACKAGE_DIR, 'res', 'group_hidden.svg'))
+	return QIcon(os.path.join(APP_PATH, 'res', 'group_hidden.svg'))
 
 @lru_cache
 def remove_icon():

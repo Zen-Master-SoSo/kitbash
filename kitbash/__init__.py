@@ -33,8 +33,8 @@ from conn_jack import JackConnectError
 
 __version__ = "1.1.0"
 
-APPLICATION_NAME			= "kitbash"
-PACKAGE_DIR					= os.path.dirname(__file__)
+APP_NAME					= "kitbash"
+APP_PATH					= os.path.dirname(__file__)
 DEFAULT_STYLE				= 'system'
 KEY_STYLE					= 'Style'
 KEY_SAMPLES_MODE			= 'KitSaveDialog/SamplesMode'
@@ -53,7 +53,7 @@ def settings():
 def styles():
 	return {
 		os.path.splitext(os.path.basename(path))[0] : path \
-		for path in glob.glob(os.path.join(PACKAGE_DIR, 'styles', '*.css'))
+		for path in glob.glob(os.path.join(APP_PATH, 'styles', '*.css'))
 	}
 
 def set_application_style():

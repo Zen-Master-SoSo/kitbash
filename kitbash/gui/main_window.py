@@ -6,6 +6,7 @@
 Provides MainWindow class and
 """
 import os, logging, json
+from tempfile import mkstemp
 from os.path import dirname, basename, realpath, exists, join, splitext
 from collections import deque
 from functools import partial
@@ -27,7 +28,6 @@ from recent_items_list import RecentItemsList
 from midi_notes import MIDI_DRUM_PITCHES
 from liquiphy import LiquidSFZ
 from conn_jack import JackConnectionManager
-from jack_midi_split import MidiSplitter
 from sfzen.drumkits import Drumkit, PercussionInstrument
 from sfzen import	SAMPLES_ABSPATH, SAMPLES_RESOLVE, SAMPLES_COPY, \
 					SAMPLES_SYMLINK, SAMPLES_HARDLINK
@@ -35,18 +35,23 @@ from sfzen import	SAMPLES_ABSPATH, SAMPLES_RESOLVE, SAMPLES_COPY, \
 from kitbash.gui import group_expanded_icon, group_hidden_icon, remove_icon, \
 						GeometrySaver
 from kitbash import styles, set_application_style, settings, \
-					APPLICATION_NAME, PACKAGE_DIR, \
+					APP_NAME, APP_PATH, \
 					KEY_STYLE, KEY_SAMPLES_MODE, \
 					KEY_RECENT_DRUMKIT_FOLDER, KEY_RECENT_DRUMKITS, \
 					KEY_RECENT_PROJECT_FOLDER, KEY_RECENT_PROJECTS
 
+UPDATES_DEBOUNCE = 680
+MESSAGE_TIMEOUT = 3000
+
 
 class DrumkitWidget(QFrame):
 	"""
-	Graphical representation of a drumkit.
+	Graphical representation of a Drumkit.
 	"""
 
 	sig_inst_toggle = pyqtSignal(QObject, str, bool, bool)
+	sig_note_on = pyqtSignal(int)
+	sig_note_off = pyqtSignal(int)
 	sig_remove_drumkit = pyqtSignal(QObject)
 
 	def __init__(self, filename, parent):
@@ -54,10 +59,8 @@ class DrumkitWidget(QFrame):
 		self.sfz_filename = filename
 		self.moniker = basename(self.sfz_filename)
 		self.drumkit = None
-		self.synth = None
 		self.port_number = None
 		self.initial_height = None
-		self.velocity = None
 
 		self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
 
@@ -112,14 +115,13 @@ class DrumkitWidget(QFrame):
 
 	def ready(self):
 		"""
-		Returns "True" if this DrumkitWidget has a synth assigned and a bashed kit.
+		Returns "True" if this DrumkitWidget has a Drumkit assigned.
 		"""
-		return not self.synth is None and not self.drumkit is None
+		return not self.drumkit is None
 
-	@pyqtSlot(Drumkit)
-	def slot_drumkit_loaded(self, drumkit):
+	def set_drumkit(self, drumkit):
 		"""
-		Called when KitLoader is finshed loading and interpreted SFZ.
+		Called when KitLoader is finshed loading and interpreted Drumkit.
 		Fills the groups and instruments of this the DrumkitWidget.
 		"""
 		self.drumkit = drumkit
@@ -150,25 +152,19 @@ class DrumkitWidget(QFrame):
 		for inst_button in group_frame.findChildren(InstrumentButton):
 			inst_button.setChecked(group_button.isChecked())
 
-	@pyqtSlot(int)
-	def slot_velocity_change(self, velocity):
-		self.velocity = velocity
-
 	@pyqtSlot(PercussionInstrument)
 	def slot_instrument_pressed(self, inst):
 		"""
 		Triggered by InstrumentButton mouse press.
-		Sends a "noteon" to this widget's synth.
 		"""
-		self.synth.noteon(0, inst.pitch, self.velocity)
+		self.sig_note_on.emit(inst.pitch)
 
 	@pyqtSlot(PercussionInstrument)
 	def slot_instrument_released(self, inst):
 		"""
 		Triggered by InstrumentButton mouse relase.
-		Sends a "v" to this widget's synth.
 		"""
-		self.synth.noteoff(0, inst.pitch)
+		self.sig_note_off.emit(inst.pitch)
 
 	@pyqtSlot(QPushButton)
 	def slot_instrument_toggled(self, button):
@@ -253,11 +249,11 @@ class DrumkitWidget(QFrame):
 			button.setChecked(False)
 			self.update_count()
 
-	def selected_instrument_ids(self):
+	def selected_instruments(self):
 		"""
-		Returns a list of instrument ids from selected instrument buttons.
+		Returns a list of PercussionInstrument from selected instrument buttons.
 		"""
-		return [ button.inst.inst_id \
+		return [ button.inst \
 				for button in self.findChildren(InstrumentButton) \
 				if button.isChecked() ]
 
@@ -314,7 +310,6 @@ class MainWindow(QMainWindow, GeometrySaver):
 
 	instance = None
 	options = None
-	sig_ports_complete = pyqtSignal()
 
 	def __new__(cls, options):
 		if cls.instance is None:
@@ -328,51 +323,65 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.options = options
 		set_application_style()
 		with ShutUpQT():
-			uic.loadUi(join(PACKAGE_DIR, 'gui', 'main_window.ui'), self)
-		self.setWindowIcon(QIcon(join(PACKAGE_DIR, 'res', 'kitbash-icon.png')))
+			uic.loadUi(join(APP_PATH, 'gui', 'main_window.ui'), self)
+		self.setWindowIcon(QIcon(join(APP_PATH, 'res', 'kitbash-icon.png')))
 		self.restore_geometry()
-		self.recent_projects = RecentItemsList(settings().value(KEY_RECENT_PROJECTS, []))
-		self.recent_drumkits = RecentItemsList(settings().value(KEY_RECENT_DRUMKITS, []))
-		self.dirty = False
-		self.project_filename = None
-		self.project_definition = None
-		self.project_loading = False
-		self.bashed_sfz_filename = None
-		self.bashed_sfz_samples_mode = None
-		self.drumkit_port_ranges = set( port_number for port_number in range(16) )
-		self.synth_creation_queue = deque()
-		self.new_synth = None
-		self.current_midi_source = None
-		self.current_audio_sink = None
-		self.audio_sink_ports = []
-		self.base_xruns = self.current_xruns = 0
-		self.b_xruns.setText('0')
-		self.fill_style_menu()
-		self.setup_window_elements()
-		self.connect_actions()
-		self.clear()
-		# Setup background threadpool for KitLoader and KitBasher workers
-		self.background_threadpool = QThreadPool()
-		self.setup_conn_man()
-		# Fill sink/source menus:
-		self.fill_cmb_sources()
-		self.fill_cmb_sinks()
-		# Setup signals
-		# Note: sig_ports_complete is emitted from a JACK.Client process thread.
-		# That is why we force use of QueuedConnection between that signal and the main GUI thread.
-		self.sig_ports_complete.connect(self.slot_ports_complete, type = Qt.QueuedConnection)
-		self.cmb_midi_srcs.currentTextChanged.connect(self.slot_midi_src_changed)
-		self.cmb_audio_sinks.currentTextChanged.connect(self.slot_audio_sink_changed)
-		# Setup MidiSplitter
-		self.midi_splitter = MidiSplitter(APPLICATION_NAME)
-		self.splitter_assignments = [ None for i in range(16) ]
 		# Setup signals
 		signal(SIGINT, self.system_signal)
 		signal(SIGTERM, self.system_signal)
-		if self.options.Filename:
-			QTimer.singleShot(10, partial(self.load_project, self.options.Filename))
+		# Internal variables:
+		self.recent_projects = RecentItemsList(settings().value(KEY_RECENT_PROJECTS, []))
+		self.recent_drumkits = RecentItemsList(settings().value(KEY_RECENT_DRUMKITS, []))
+		self.audio_sink_ports = []
+		self.base_xruns = self.current_xruns = 0
+		self.bashed_kit = None
+		self.current_audio_sink = None
+		self.current_midi_source = None
+		self.dirty = False
+		self.project_definition = None
+		self.project_filename = None
+		self.project_loading = False
+		self.saved_sfz_filename = None
+		self.saved_sfz_samples_mode = None
+		# Setup GUI elements
+		self.fill_style_menu()
+		self.setup_kits_area()
+		self.connect_actions()
+		# Setup update_timer which will trigger a rewrite of the output SFZ only after an interval:
+		self.update_timer = QTimer()
+		self.update_timer.setSingleShot(True)
+		self.update_timer.setInterval(UPDATES_DEBOUNCE)
+		self.update_timer.timeout.connect(self.slot_timer_timeout)
+		# Setup background threadpool for KitLoader and KitBasher workers
+		self.background_threadpool = QThreadPool()
+		# Setup JackConnectionManager
+		self.conn_man = JackConnectionManager()
+		self.conn_man.on_error(self.jack_error)
+		self.conn_man.on_xrun(self.jack_xrun)
+		self.conn_man.on_shutdown(self.jack_shutdown)
+		self.conn_man.on_client_registration(self.jack_client_registration)
+		self.conn_man.on_port_registration(self.jack_port_registration)
+		# Fill sink/source menus:
+		self.fill_cmb_sources()
+		self.fill_cmb_sinks()
+		# Setup synth with empty SFZ:
+		fd, self.temp_sfz_filename = mkstemp(suffix = '.sfz')
+		with open(join(APP_PATH, 'res', 'empty.sfz'), 'r') as fob:
+			os.write(fd, fob.read().encode())
+		os.close(fd)
+		self.synth = JackLiquidSFZ(self.temp_sfz_filename)
+		self.synth_ports_ready = False
+		self.update_ui()
+		QTimer.singleShot(0, self.layout_complete)
 
-	def setup_window_elements(self):
+	@pyqtSlot()
+	def layout_complete(self):
+		self.synth.start()
+		if self.options.Filename:
+			# Load filename passed from argv
+			self.load_project(self.options.Filename)
+
+	def setup_kits_area(self):
 		self.drumkit_widgets = VListLayout(end_space = 10)
 		self.drumkit_widgets.setContentsMargins(0,0,0,0)
 		self.drumkit_widgets.setSpacing(2)
@@ -387,29 +396,25 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.action_save_bashed_kit.triggered.connect(self.slot_save_kit)
 		self.action_save_kit_as.triggered.connect(self.slot_save_kit_as)
 		self.action_add_drumkit.triggered.connect(self.slot_add_drumkit)
-		self.b_add_drumkit.clicked.connect(self.slot_add_drumkit)
 		self.action_remove_all_kits.triggered.connect(self.slot_remove_all_kits)
 		self.action_reload_style.triggered.connect(self.slot_reload_style)
 		self.menu_recent_project.aboutToShow.connect(self.slot_show_recent_projects)
 		self.menu_recent_drumkits.aboutToShow.connect(self.slot_show_recent_drumkits)
 		self.kits_area.setContextMenuPolicy(Qt.CustomContextMenu)
 		self.kits_area.customContextMenuRequested.connect(self.slot_kits_context_menu)
+		self.b_open_project.clicked.connect(self.slot_open_project)
+		self.b_save_project.clicked.connect(self.slot_save_project)
+		self.b_save_kit.clicked.connect(self.slot_save_kit)
 		self.b_copy_path.clicked.connect(self.slot_copy_kit_path)
+		self.b_add_drumkit.clicked.connect(self.slot_add_drumkit)
 		self.b_xruns.clicked.connect(self.slot_xruns_clicked)
-
-	def setup_conn_man(self):
-		# Setup JackConnectionManager
-		self.conn_man = JackConnectionManager()
-		self.conn_man.on_error(self.jack_error)
-		self.conn_man.on_xrun(self.jack_xrun)
-		self.conn_man.on_shutdown(self.jack_shutdown)
-		self.conn_man.on_client_registration(self.jack_client_registration)
-		self.conn_man.on_port_registration(self.jack_port_registration)
+		self.cmb_midi_srcs.currentTextChanged.connect(self.slot_midi_src_changed)
+		self.cmb_audio_sinks.currentTextChanged.connect(self.slot_audio_sink_changed)
 
 	def update_ui(self):
-		title = APPLICATION_NAME \
+		title = APP_NAME \
 			if self.project_filename is None \
-			else f"{self.project_filename} [{APPLICATION_NAME}]"
+			else f"{self.project_filename} [{APP_NAME}]"
 		self.setWindowTitle("* " + title if self.dirty else title)
 		has_kits = bool(len(self.drumkit_widgets))
 		self.action_collapse_kits.setEnabled(has_kits)
@@ -419,10 +424,11 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.action_save_project.setEnabled(has_kits and self.dirty)
 		self.action_save_project_as.setEnabled(has_kits)
 		self.action_save_bashed_kit.setEnabled(has_kits)
+		self.b_save_project.setEnabled(has_kits)
 		self.b_save_kit.setEnabled(has_kits)
-		self.b_copy_path.setVisible(bool(self.bashed_sfz_filename))
-		self.lbl_bashed_sfz_filename.setText(self.bashed_sfz_filename \
-			if self.bashed_sfz_filename else '')
+		self.b_copy_path.setVisible(bool(self.saved_sfz_filename))
+		self.lbl_bashed_sfz_filename.setText(self.saved_sfz_filename \
+			if self.saved_sfz_filename else '')
 
 	# -----------------------------------------------------------------
 	# Style functions:
@@ -445,6 +451,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 	def select_style(self, style):
 		settings().setValue(KEY_STYLE, style)
 		set_application_style()
+		self.statusbar.showMessage(f'Set style "{style}"', MESSAGE_TIMEOUT)
 
 	@pyqtSlot()
 	def slot_reload_style(self):
@@ -460,8 +467,8 @@ class MainWindow(QMainWindow, GeometrySaver):
 
 	def compile_project_def(self):
 		return {
-			'bashed_sfz_filename'		: self.bashed_sfz_filename,
-			'bashed_sfz_samples_mode'	: self.bashed_sfz_samples_mode,
+			'saved_sfz_filename'		: self.saved_sfz_filename,
+			'saved_sfz_samples_mode'	: self.saved_sfz_samples_mode,
 			'drumkits'					: {
 				widget.sfz_filename : widget.saved_selections() \
 				for widget in self.drumkit_widgets
@@ -478,6 +485,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		Starts project load; saves recent file name.
 		Permission to clear must already have been given.
 		"""
+		logging.debug('load_project %s', filename)
 		if exists(filename):
 			try:
 				with open(filename, 'r', encoding = 'utf-8') as fh:
@@ -487,19 +495,20 @@ class MainWindow(QMainWindow, GeometrySaver):
 					f'"{filename}"\n' + \
 					f'"{e}"\n' + \
 					'Are you sure it is a kitbash project?')
+				self.unregister_recent_project(filename)
 			else:
 				if len(self.drumkit_widgets):
 					self.clear()
 				self.project_filename = realpath(filename)
 				self.register_recent_project()
 				self.project_loading = True
-				self.bashed_sfz_filename = self.project_definition['bashed_sfz_filename']
-				self.bashed_sfz_samples_mode = self.project_definition['bashed_sfz_samples_mode']
+				self.saved_sfz_filename = self.project_definition['saved_sfz_filename']
+				self.saved_sfz_samples_mode = self.project_definition['saved_sfz_samples_mode']
 				for sfzfile in self.project_definition['drumkits'].keys():
 					self.load_drumkit(sfzfile)
+				self.statusbar.showMessage(f'Loaded project {self.project_filename}', MESSAGE_TIMEOUT)
 		else:
-			self.recent_projects.remove(filename)
-			settings().setValue(KEY_RECENT_PROJECTS, self.recent_projects.items)
+			self.unregister_recent_project(filename)
 			DevilBox(f"Project not found: {filename}")
 
 	def save_project(self):
@@ -507,15 +516,28 @@ class MainWindow(QMainWindow, GeometrySaver):
 			json.dump(self.compile_project_def(), fh, indent="\t")
 		self.register_recent_project()
 		self.set_dirty(False)
+		self.statusbar.showMessage(f'Saved project at {self.project_filename}', MESSAGE_TIMEOUT)
 
 	def save_kit(self):
-		worker = KitBasher(self.drumkit_widgets)
-		worker.signals.sig_bashed.connect(self.slot_drumkit_bashed)
-		self.background_threadpool.start(worker)
+		kit = self.bashed_kit.simplified()
+		kit.basedir = dirname(self.saved_sfz_filename)
+		try:
+			kit.save_as(self.saved_sfz_filename, self.saved_sfz_samples_mode)
+			self.lbl_bashed_sfz_filename.setText(self.saved_sfz_filename)
+			logging.debug('Saved bashed SFZ at %s', self.saved_sfz_filename)
+			self.statusbar.showMessage(f'Saved {self.saved_sfz_filename}', MESSAGE_TIMEOUT)
+		except OSError as e:
+			DevilBox('Hardlinks between devices are not allowed.\n' +\
+				'Choose a different path or sample mode.' if e.errno == 18 \
+				else str(e))
 
 	def register_recent_project(self):
 		self.recent_projects.bump(self.project_filename)
 		settings().setValue(KEY_RECENT_PROJECT_FOLDER, dirname(self.project_filename))
+		settings().setValue(KEY_RECENT_PROJECTS, self.recent_projects.items)
+
+	def unregister_recent_project(self, filename):
+		self.recent_projects.remove(filename)
 		settings().setValue(KEY_RECENT_PROJECTS, self.recent_projects.items)
 
 	def okay_to_clear(self):
@@ -540,12 +562,12 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.project_definition = None
 		self.project_loading = False
 		self.bashed_kit = None
-		self.bashed_sfz_filename = None
-		self.bashed_sfz_samples_mode = None
-		self.new_synth = None
+		self.saved_sfz_filename = None
+		self.saved_sfz_samples_mode = None
 		self.dirty = False
 		for widget in reversed(self.drumkit_widgets):
 			self.slot_remove_drumkit(widget)
+		self.statusbar.showMessage('Cleared', MESSAGE_TIMEOUT)
 		self.set_dirty(False)
 
 	# -----------------------------------------------------------------
@@ -556,9 +578,9 @@ class MainWindow(QMainWindow, GeometrySaver):
 		PyQt closeEvent overload.
 		"""
 		if self.okay_to_clear():
+			self.synth.quit()
+			os.unlink(self.temp_sfz_filename)
 			self.conn_man.close()
-			for drumkit_widget in self.drumkit_widgets:
-				drumkit_widget.synth.quit()
 			self.save_geometry()
 			logging.debug('Total %d xruns', self.current_xruns)
 			event.accept()
@@ -570,6 +592,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		Catch system signals SIGINT and SIGTERM
 		"""
 		logging.debug('Caught signal - shutting down')
+		self.statusbar.showMessage('Caught signal - shutting down', MESSAGE_TIMEOUT)
 		self.close()
 
 	# -----------------------------------------------------------------
@@ -580,7 +603,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 			self.cmb_midi_srcs.clear()
 			self.cmb_midi_srcs.addItem('')
 			for port in self.conn_man.output_ports():
-				if port.is_midi and APPLICATION_NAME not in port.name:
+				if port.is_midi and APP_NAME not in port.name:
 					self.cmb_midi_srcs.addItem(port.name)
 			if self.current_midi_source:
 				self.cmb_midi_srcs.setCurrentText(self.current_midi_source)
@@ -597,52 +620,32 @@ class MainWindow(QMainWindow, GeometrySaver):
 	@pyqtSlot(str)
 	def slot_midi_src_changed(self, value):
 		if self.current_midi_source:
-			self.conn_man.disconnect_by_name(self.current_midi_source, self.midi_splitter.input_port.name)
+			self.conn_man.disconnect_by_name(self.current_midi_source, self.synth.input_port.name)
 		self.current_midi_source = value
 		if self.current_midi_source:
-			self.conn_man.connect_by_name(self.current_midi_source, self.midi_splitter.input_port.name)
+			self.conn_man.connect_by_name(self.current_midi_source, self.synth.input_port.name)
+		self.statusbar.showMessage(f'Connected to MIDI source "{self.current_midi_source}"',
+			MESSAGE_TIMEOUT)
 
 	@pyqtSlot(str)
 	def slot_audio_sink_changed(self, value):
-		if self.current_audio_sink:
-			liquid_client_names = [
-				drumkit_widget.synth.client_name \
-				for drumkit_widget in self.drumkit_widgets \
-				if drumkit_widget.synth and drumkit_widget.synth.client_name
-			]
-			for audio_sink_port in self.audio_sink_ports:
-				for src_port in self.conn_man.get_port_connections(audio_sink_port):
-					if src_port.client_name in liquid_client_names:
-						self.conn_man.disconnect(src_port, audio_sink_port)
+		if self.audio_sink_ports:
+			for src,tgt in zip(self.synth.output_ports, self.audio_sink_ports):
+				self.conn_man.disconnect(src, tgt)
 		self.current_audio_sink = value
 		if self.current_audio_sink:
 			self.audio_sink_ports = [ port for port \
-				in self.conn_man.physical_input_ports() \
-				if port.client_name == self.current_audio_sink ]
-			for drumkit_widget in self.drumkit_widgets:
-				self.connect_audio_sink(drumkit_widget.synth)
+				in self.conn_man.get_client_ports(self.current_audio_sink) \
+				if port.is_input ]
+			for src,tgt in zip(self.synth.output_ports, self.audio_sink_ports):
+				self.conn_man.connect(src, tgt)
+			self.statusbar.showMessage(f'Connected to audio sink "{self.current_audio_sink}"',
+				MESSAGE_TIMEOUT)
 		else:
 			self.audio_sink_ports = []
 
-	def connect_midi_source(self, synth):
-		if self.current_midi_source:
-			self.conn_man.connect_by_name(self.current_midi_source, synth.input_port.name)
-
-	def connect_audio_sink(self, synth):
-		for src,tgt in zip(synth.output_ports, self.audio_sink_ports):
-			self.conn_man.connect(src, tgt)
-
 	# -----------------------------------------------------------------
 	# Synth / port management
-
-	def instantiate_synth(self, associated_object):
-		self.synth_creation_queue.append(associated_object)
-		if self.new_synth is None:
-			self.start_new_synth()
-
-	def start_new_synth(self):
-		self.new_synth = JackLiquidSFZ(self.synth_creation_queue[0].sfz_filename)
-		self.new_synth.start()
 
 	def jack_error(self, error_message):
 		logging.error('JACK ERROR: %s', error_message)
@@ -656,75 +659,42 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.close()
 
 	def jack_client_registration(self, client_name, action):
-		if action:
-			if self.new_synth and 'liquidsfz' in client_name:
-				self.new_synth.client_name = client_name
+		if action and 'liquidsfz' in client_name:
+			self.synth.client_name = client_name
 		else:
-			if self.cmb_audio_sinks.findText(client_name, Qt.MatchStartsWith) > -1:
-				self.fill_cmb_sinks()
-			elif self.cmb_midi_srcs.findText(client_name, Qt.MatchStartsWith) > -1:
-				self.fill_cmb_sources()
+			self.fill_cmb_sources()
+			self.fill_cmb_sinks()
 
 	def jack_port_registration(self, port, action):
-		if action and \
-			self.new_synth and \
-			self.new_synth.client_name and \
-			self.new_synth.client_name in port.name:
+		if action and self.synth.client_name in port.name:
 			if port.is_input and port.is_midi:
-				self.new_synth.input_port = port
+				self.synth.input_port = port
 			elif port.is_output and port.is_audio:
-				self.new_synth.output_ports.append(port)
+				self.synth.output_ports.append(port)
 			else:
 				logging.error('Incorrect port type: %s', port)
-			if self.new_synth.input_port and len(self.new_synth.output_ports) == 2:
-				self.sig_ports_complete.emit()
-		elif APPLICATION_NAME not in port.name:
-			if port.is_output and port.is_midi:
-				self.fill_cmb_sources()
-			elif port.is_input and port.is_audio:
-				self.fill_cmb_sinks()
-
-	@pyqtSlot()
-	def slot_ports_complete(self):
-		associated_object = self.synth_creation_queue.popleft()
-		associated_object.synth = self.new_synth
-		if len(self.synth_creation_queue):
-			self.start_new_synth()
+			self.synth_ports_ready = bool(self.synth.input_port) and \
+				len(self.synth.output_ports) == 2
 		else:
-			self.new_synth = None
-		self.connect_audio_sink(associated_object.synth)
-		if isinstance(associated_object, DrumkitWidget):
-			logging.debug('%s ports complete', associated_object)
-			src = self.midi_splitter.output_ports[associated_object.port_number].name
-			tgt = associated_object.synth.input_port.name
-			self.conn_man.connect_by_name(src, tgt)
-			self.check_drumkit_ready(associated_object)
-		else:
-			self.connect_midi_source(associated_object.synth)
+			self.fill_cmb_sources()
+			self.fill_cmb_sinks()
 
 	# -----------------------------------------------------------------
 	# Drumkit load / delete / instrument selection
 
 	def load_drumkit(self, filename):
 		"""
-		Adds a drumkit.
+		Adds a Drumkit.
 		1. called at project load
 		2. triggered by "Edit -> Load Drumkit" menu
 		3. triggered by kits_area custom context menu
 		"""
 		if exists(filename):
 			drumkit_widget = DrumkitWidget(filename, self)
-			available_ports = self.available_port_numbers()
-			if available_ports:
-				drumkit_widget.port_number = available_ports[0]
-			else:
-				DevilBox('Not enough ports (Maximum 16)')
 			self.drumkit_widgets.append(drumkit_widget)
 			QApplication.instance().processEvents()
-			self.instantiate_synth(drumkit_widget)
 			worker = KitLoader(drumkit_widget)
-			worker.signals.sig_loaded.connect(drumkit_widget.slot_drumkit_loaded)
-			worker.signals.sig_widget_loaded.connect(self.slot_drumkit_widget_loaded)
+			worker.signals.sig_loaded.connect(self.slot_drumkit_loaded)
 			self.background_threadpool.start(worker)
 			if not self.project_loading:
 				self.recent_drumkits.bump(filename)
@@ -735,36 +705,28 @@ class MainWindow(QMainWindow, GeometrySaver):
 		if not self.project_loading:
 			settings().setValue(KEY_RECENT_DRUMKITS, self.recent_drumkits.items)
 
-	@pyqtSlot(DrumkitWidget)
-	def slot_drumkit_widget_loaded(self, drumkit_widget):
+	@pyqtSlot(DrumkitWidget, Drumkit)
+	def slot_drumkit_loaded(self, drumkit_widget, drumkit):
 		"""
 		Called when KitLoader is finshed loading and interpreted SFZ.
-		"""
-		self.update_ui()
-		self.check_drumkit_ready(drumkit_widget)
-
-	def check_drumkit_ready(self, drumkit_widget):
-		"""
-		Check if any/all drumkit widget has a synth assigned and a bashed kit.
-		1. called after KitLoader is finished,
-		2. called after synth is assigned (ports ready)
 		If ready when project_loading, applies saved selections.
 		"""
-		if drumkit_widget.ready():
-			drumkit_widget.sig_inst_toggle.connect(self.slot_inst_toggle)
-			drumkit_widget.sig_remove_drumkit.connect(self.slot_remove_drumkit)
-			drumkit_widget.velocity = self.spn_velocity.value()
-			self.spn_velocity.valueChanged.connect(drumkit_widget.slot_velocity_change)
-			if self.project_loading:
-				drumkit_widget.apply_selections(
-					self.project_definition['drumkits'][drumkit_widget.sfz_filename])
-				if all(drumkit_widget.ready() for drumkit_widget in self.drumkit_widgets):
-					self.project_loading = False
-					self.update_ui()
-			else:
-				if len(self.drumkit_widgets) == 1:
-					drumkit_widget.slot_select_all()
-				self.set_dirty()
+		drumkit_widget.set_drumkit(drumkit)
+		drumkit_widget.sig_inst_toggle.connect(self.slot_inst_toggle)
+		drumkit_widget.sig_note_on.connect(self.slot_note_on)
+		drumkit_widget.sig_note_off.connect(self.slot_note_off)
+		drumkit_widget.sig_remove_drumkit.connect(self.slot_remove_drumkit)
+		if self.project_loading:
+			drumkit_widget.apply_selections(
+				self.project_definition['drumkits'][drumkit_widget.sfz_filename])
+			if all(drumkit_widget.ready() for drumkit_widget in self.drumkit_widgets):
+				self.project_loading = False
+				self.set_dirty(False)
+		else:
+			self.statusbar.showMessage(f'Loaded {drumkit_widget.moniker}', MESSAGE_TIMEOUT)
+			if len(self.drumkit_widgets) == 1:
+				drumkit_widget.slot_select_all()
+			self.set_dirty()
 
 	@pyqtSlot(QObject)
 	def slot_remove_drumkit(self, drumkit_widget):
@@ -773,10 +735,9 @@ class MainWindow(QMainWindow, GeometrySaver):
 		called in any place where a drumkit_widget needs to be removed,
 		including clear(), slot_remove_all_kits().
 		"""
-		self.midi_splitter.clear_port_assignments(drumkit_widget.port_number)
-		drumkit_widget.synth.quit()
 		self.drumkit_widgets.remove(drumkit_widget)
 		drumkit_widget.deleteLater()
+		self.statusbar.showMessage(f'Deleted {drumkit_widget.moniker}', MESSAGE_TIMEOUT)
 		self.set_dirty()
 
 	@pyqtSlot(QObject, str, bool, bool)
@@ -799,43 +760,43 @@ class MainWindow(QMainWindow, GeometrySaver):
 		# Deselect the GroupButton if instrument deselected:
 		else:
 			source_widget.deselect_parent_group(inst_id)
-		# Enable/disable routing midi events to the source_widget's synth:
-		if state:
-			self.midi_splitter.assign_note(
-				MIDI_DRUM_PITCHES[inst_id],
-				source_widget.port_number)
-		else:
-			self.midi_splitter.clear_note_assignment(
-				MIDI_DRUM_PITCHES[inst_id],
-				source_widget.port_number)
 		self.set_dirty()
+		self.update_timer.start()
+		self.statusbar.showMessage('updating ...', MESSAGE_TIMEOUT)
+
+	@pyqtSlot()
+	def slot_timer_timeout(self):
+		"""
+		Triggered by update_timer after changes have been made.
+		"""
+		worker = KitBasher(self.drumkit_widgets)
+		worker.signals.sig_bashed.connect(self.slot_drumkit_bashed)
+		self.background_threadpool.start(worker)
 
 	@pyqtSlot(Drumkit)
 	def slot_drumkit_bashed(self, bashed_kit):
 		"""
 		Triggered from KitBasher signal when bashing is finished.
 		"""
-		try:
-			bashed_kit.save_as(self.bashed_sfz_filename, self.bashed_sfz_samples_mode)
-			self.lbl_bashed_sfz_filename.setText(self.bashed_sfz_filename)
-			logging.debug('Saved bashed .sfz at %s', self.bashed_sfz_filename)
-		except OSError as e:
-			DevilBox('Hardlinks between devices are not allowed.\n' +\
-				'Choose a different path or sample mode.' if e.errno == 18 \
-				else str(e))
+		self.bashed_kit = bashed_kit
+		for sample in self.bashed_kit.samples():
+			sample.use_abspath()
+		fd, path = mkstemp(suffix = '.sfz')
+		with os.fdopen(fd, 'w') as fob:
+			self.bashed_kit.write(fob)
+		logging.debug('saved bashed kit: %s', path)
+		self.synth.load(path)
+		os.unlink(self.temp_sfz_filename)
+		self.temp_sfz_filename = path
+		self.statusbar.showMessage('Current working Drumkit updated', MESSAGE_TIMEOUT)
 
-	def used_port_numbers(self):
-		"""
-		Returns a set of MidiSplitter port numbers assigned to drumkit widget's synth
-		"""
-		return set(drumkit_widget.port_number \
-			for drumkit_widget in self.drumkit_widgets)
+	@pyqtSlot(int)
+	def slot_note_on(self, pitch):
+		self.synth.noteon(0, pitch, self.spn_velocity.value())
 
-	def available_port_numbers(self):
-		"""
-		Returns a list of MidiSplitter port numbers not yet assigned to drumkit widget's synth
-		"""
-		return list(self.drumkit_port_ranges ^ self.used_port_numbers())
+	@pyqtSlot(int)
+	def slot_note_off(self, pitch):
+		self.synth.noteoff(0, pitch)
 
 	# -----------------------------------------------------------------
 	# UI handling slots:
@@ -971,7 +932,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 
 	@pyqtSlot()
 	def slot_save_kit(self):
-		if self.bashed_sfz_filename is None:
+		if self.saved_sfz_filename is None:
 			self.slot_save_kit_as()
 		else:
 			self.save_kit()
@@ -984,12 +945,11 @@ class MainWindow(QMainWindow, GeometrySaver):
 		"""
 		dlg = KitSaveDialog(self,
 			int(settings().value(KEY_SAMPLES_MODE, SAMPLES_ABSPATH)) \
-			if self.bashed_sfz_samples_mode is None \
-			else self.bashed_sfz_samples_mode)
+			if self.saved_sfz_samples_mode is None \
+			else self.saved_sfz_samples_mode)
 		if dlg.exec_() and dlg.selected_file:
-			self.bashed_sfz_filename = dlg.selected_file
-			self.bashed_sfz_samples_mode = dlg.samples_mode
-			self.set_dirty()
+			self.saved_sfz_filename = dlg.selected_file
+			self.saved_sfz_samples_mode = dlg.samples_mode
 			self.save_kit()
 
 	@pyqtSlot()
@@ -1009,6 +969,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 	@pyqtSlot()
 	def slot_copy_kit_path(self):
 		QApplication.instance().clipboard().setText(self.lbl_bashed_sfz_filename.text())
+		self.statusbar.showMessage('Copied path to clipboard.', MESSAGE_TIMEOUT)
 
 
 class KitWorkerSignals(QObject):
@@ -1016,14 +977,13 @@ class KitWorkerSignals(QObject):
 	Signals common to KitLoader and KitBasher.
 	(PyQt QRunnable does not support its own signals)
 	"""
-	sig_loaded = pyqtSignal(Drumkit)
-	sig_widget_loaded = pyqtSignal(DrumkitWidget, Drumkit)
+	sig_loaded = pyqtSignal(DrumkitWidget, Drumkit)
 	sig_bashed = pyqtSignal(Drumkit)
 
 
 class KitLoader(QRunnable):
 	"""
-	Loads a drumkit in a background thread and emits "sig_loaded" when done.
+	Loads a Drumkit in a background thread and emits "sig_drumkit_loaded" when done.
 	"""
 
 	def __init__(self, drumkit_widget):
@@ -1034,8 +994,7 @@ class KitLoader(QRunnable):
 	@pyqtSlot()
 	def run(self):
 		drumkit = Drumkit(self.drumkit_widget.sfz_filename)
-		self.signals.sig_loaded.emit(drumkit)
-		self.signals.sig_widget_loaded.emit(self.drumkit_widget, drumkit)
+		self.signals.sig_loaded.emit(self.drumkit_widget, drumkit)
 
 
 class KitBasher(QRunnable):
@@ -1052,8 +1011,8 @@ class KitBasher(QRunnable):
 	def run(self):
 		bashed_kit = Drumkit()
 		for drumkit_widget in self.drumkit_widgets:
-			for inst_id in drumkit_widget.selected_instrument_ids():
-				bashed_kit.import_instrument(inst_id, drumkit_widget.drumkit)
+			for instrument in drumkit_widget.selected_instruments():
+				bashed_kit.import_instrument(instrument)
 		self.signals.sig_bashed.emit(bashed_kit)
 
 

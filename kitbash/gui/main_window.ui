@@ -29,60 +29,91 @@
     </property>
     <item>
      <widget class="QFrame" name="frm_controls">
-      <layout class="QHBoxLayout" name="horizontalLayout">
-       <property name="spacing">
-        <number>9</number>
-       </property>
+      <layout class="QHBoxLayout" name="horizontalLayout_2">
        <property name="leftMargin">
-        <number>4</number>
-       </property>
-       <property name="topMargin">
-        <number>4</number>
-       </property>
-       <property name="rightMargin">
-        <number>4</number>
-       </property>
-       <property name="bottomMargin">
         <number>2</number>
        </property>
+       <property name="topMargin">
+        <number>3</number>
+       </property>
+       <property name="rightMargin">
+        <number>2</number>
+       </property>
+       <property name="bottomMargin">
+        <number>1</number>
+       </property>
        <item>
-        <widget class="QPushButton" name="b_save_kit">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
+        <layout class="QHBoxLayout" name="hz5">
+         <property name="spacing">
+          <number>2</number>
          </property>
-         <property name="toolTip">
-          <string>Save this bashed kit</string>
-         </property>
-         <property name="text">
-          <string/>
-         </property>
-         <property name="icon">
-          <iconset theme="document-save">
-           <normaloff>.</normaloff>.</iconset>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="b_add_drumkit">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="toolTip">
-          <string>Add an existing drumkit to the mix</string>
-         </property>
-         <property name="text">
-          <string/>
-         </property>
-         <property name="icon">
-          <iconset theme="list-add"/>
-         </property>
-        </widget>
+         <item>
+          <widget class="QPushButton" name="b_open_project">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset theme="document-open"/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="b_save_project">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>Save this bashed kit</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset theme="document-save">
+             <normaloff>.</normaloff>.</iconset>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="b_save_kit">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset theme="audio-x-generic"/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="b_add_drumkit">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>Add an existing drumkit to the mix</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset theme="list-add">
+             <normaloff>.</normaloff>.</iconset>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
        <item>
         <widget class="QLabel" name="lbl_bashed_sfz_filename">
@@ -124,7 +155,7 @@
          </property>
          <property name="sizeHint" stdset="0">
           <size>
-           <width>287</width>
+           <width>20</width>
            <height>20</height>
           </size>
          </property>
@@ -259,7 +290,7 @@
          <x>0</x>
          <y>0</y>
          <width>980</width>
-         <height>696</height>
+         <height>676</height>
         </rect>
        </property>
       </widget>
@@ -284,6 +315,9 @@
      <property name="title">
       <string>&amp;Recent Projects ...</string>
      </property>
+     <property name="icon">
+      <iconset theme="document-open-recent"/>
+     </property>
     </widget>
     <addaction name="action_new_project"/>
     <addaction name="action_open_project"/>
@@ -304,6 +338,9 @@
      <property name="title">
       <string>St&amp;yle</string>
      </property>
+     <property name="icon">
+      <iconset theme="preferences-desktop-theme"/>
+     </property>
     </widget>
     <addaction name="action_collapse_kits"/>
     <addaction name="separator"/>
@@ -318,6 +355,9 @@
      <property name="title">
       <string>Recent &amp;Drumkits</string>
      </property>
+     <property name="icon">
+      <iconset theme="document-open-recent"/>
+     </property>
     </widget>
     <addaction name="action_add_drumkit"/>
     <addaction name="menu_recent_drumkits"/>
@@ -328,7 +368,11 @@
    <addaction name="menu_Edit"/>
    <addaction name="menu_View"/>
   </widget>
+  <widget class="QStatusBar" name="statusbar"/>
   <action name="action_add_drumkit">
+   <property name="icon">
+    <iconset theme="list-add"/>
+   </property>
    <property name="text">
     <string>Load Drum&amp;Kit</string>
    </property>
@@ -340,6 +384,9 @@
    </property>
   </action>
   <action name="action_quit">
+   <property name="icon">
+    <iconset theme="application-exit"/>
+   </property>
    <property name="text">
     <string>&amp;Quit</string>
    </property>
@@ -351,6 +398,9 @@
    </property>
   </action>
   <action name="action_new_project">
+   <property name="icon">
+    <iconset theme="document-new"/>
+   </property>
    <property name="text">
     <string>&amp;New</string>
    </property>
@@ -362,6 +412,9 @@
    </property>
   </action>
   <action name="action_save_project">
+   <property name="icon">
+    <iconset theme="document-save"/>
+   </property>
    <property name="text">
     <string>Save &amp;Project</string>
    </property>
@@ -370,6 +423,9 @@
    </property>
   </action>
   <action name="action_reload_style">
+   <property name="icon">
+    <iconset theme="view-refresh"/>
+   </property>
    <property name="text">
     <string>Reload style</string>
    </property>
@@ -381,6 +437,9 @@
    </property>
   </action>
   <action name="action_collapse_kits">
+   <property name="icon">
+    <iconset theme="go-up"/>
+   </property>
    <property name="text">
     <string>Collapse &amp;Kits</string>
    </property>
@@ -392,6 +451,9 @@
    </property>
   </action>
   <action name="action_open_project">
+   <property name="icon">
+    <iconset theme="document-open"/>
+   </property>
    <property name="text">
     <string>&amp;Open project</string>
    </property>
@@ -403,6 +465,9 @@
    </property>
   </action>
   <action name="action_save_bashed_kit">
+   <property name="icon">
+    <iconset theme="audio-x-generic"/>
+   </property>
    <property name="text">
     <string>&amp;Save bashed kit</string>
    </property>
@@ -414,6 +479,9 @@
    </property>
   </action>
   <action name="action_save_project_as">
+   <property name="icon">
+    <iconset theme="document-save-as"/>
+   </property>
    <property name="text">
     <string>Save Project As</string>
    </property>
@@ -425,6 +493,9 @@
    </property>
   </action>
   <action name="action_remove_all_kits">
+   <property name="icon">
+    <iconset theme="edit-clear"/>
+   </property>
    <property name="text">
     <string>Remove All Drumkits</string>
    </property>
@@ -457,7 +528,7 @@
    </hints>
   </connection>
   <connection>
-   <sender>b_save_kit</sender>
+   <sender>b_save_project</sender>
    <signal>clicked()</signal>
    <receiver>action_save_bashed_kit</receiver>
    <slot>trigger()</slot>

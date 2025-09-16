@@ -7,14 +7,12 @@ classifiers = ["License :: OSI Approved :: GNU General Public License v3 or late
 dynamic = ["version", "description"]
 dependencies = [
 	"PyQt5",
-	"conn_jack",
-	"jack_audio_player",
-	"jack_midi_split",
+	"conn_jack >= 1.2.0",
 	"liquiphy",
 	"soundfile",
-	"sfzen",
-	"midi_notes",
-	"recent_items_list",
+	"sfzen >= 1.5.0",
+	"midi_notes >= 1.1.0",
+	"recent_items_list >= 1.1.1",
 	"soso_qt_extras >= 1.2.0"
 ]
 
