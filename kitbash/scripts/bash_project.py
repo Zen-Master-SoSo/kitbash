@@ -1,6 +1,6 @@
 #  kitbash/scripts/bash_project.py
 #
-#  Copyright 2025 liyang <liyang@veronica>
+#  Copyright 2025 Leon Dionne <ldionne@dridesign.sh.cn>
 #
 """
 Bash kit from the command line

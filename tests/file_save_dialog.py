@@ -1,6 +1,6 @@
 #  kitbash/tests/file_save_dialog.py
 #
-#  Copyright 2025 liyang <liyang@veronica>
+#  Copyright 2025 Leon Dionne <ldionne@dridesign.sh.cn>
 #
 """
 Test the KitSaveDialog.
