@@ -8,7 +8,6 @@ Provides MainWindow class and
 import os, logging, json
 from tempfile import mkstemp
 from os.path import dirname, basename, realpath, exists, join, splitext
-from collections import deque
 from functools import partial
 from signal import signal, SIGINT, SIGTERM
 
@@ -25,7 +24,6 @@ from PyQt5.QtGui import		QIcon
 from qt_extras import ShutUpQT, SigBlock, DevilBox
 from qt_extras.list_layout import VListLayout
 from recent_items_list import RecentItemsList
-from midi_notes import MIDI_DRUM_PITCHES
 from liquiphy import LiquidSFZ
 from conn_jack import JackConnectionManager
 from sfzen.drumkits import Drumkit, PercussionInstrument
