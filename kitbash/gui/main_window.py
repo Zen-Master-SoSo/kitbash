@@ -518,7 +518,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 
 	def save_kit(self):
 		kit = self.bashed_kit.simplified()
-		kit.basedir = dirname(self.saved_sfz_filename)
+		kit.default_path = dirname(self.saved_sfz_filename)
 		try:
 			kit.save_as(self.saved_sfz_filename, self.saved_sfz_samples_mode)
 			self.lbl_bashed_sfz_filename.setText(self.saved_sfz_filename)
