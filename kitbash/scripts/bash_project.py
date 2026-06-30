@@ -1,6 +1,21 @@
-#  kitbash/scripts/bash_project.py
+#  kitbash/kitbash/scripts/bash_project.py
 #
-#  Copyright 2025 Leon Dionne <ldionne@dridesign.sh.cn>
+#  Copyright 2025-2026 Leon Dionne <ldionne@dridesign.sh.cn>
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
 #
 """
 Bash kit from the command line
@@ -9,12 +24,7 @@ import logging, argparse, sys, json
 from log_soso import log_error
 from sfzen.drumkits import Drumkit
 from sfzen import (
-	SAMPLES_ABSPATH,
-	SAMPLES_RESOLVE,
-	SAMPLES_COPY,
-	SAMPLES_SYMLINK,
-	SAMPLES_HARDLINK
-)
+	SAMPLES_ABSPATH, SAMPLES_RELPATH, SAMPLES_COPY, SAMPLES_SYMLINK, SAMPLES_HARDLINK)
 
 
 def main():
@@ -72,7 +82,7 @@ def main():
 		if options.abspath:
 			samples_mode = SAMPLES_ABSPATH
 		elif options.relative:
-			samples_mode = SAMPLES_RESOLVE
+			samples_mode = SAMPLES_RELPATH
 		elif options.copy:
 			samples_mode = SAMPLES_COPY
 		elif options.symlink:
@@ -98,4 +108,4 @@ if __name__ == '__main__':
 	main()
 
 
-#  end kitbash/scripts/bash_project.py
+#  end kitbash/kitbash/scripts/bash_project.py

@@ -1,6 +1,6 @@
-#  kitbash/__init__.py
+#  kitbash/kitbash/__init__.py
 #
-#  Copyright 2024 Leon Dionne <ldionne@dridesign.sh.cn>
+#  Copyright 2025-2026 Leon Dionne <ldionne@dridesign.sh.cn>
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -18,24 +18,25 @@
 #  MA 02110-1301, USA.
 #
 """
-kitbash is a program you can use to combine parts of various SFZ files into a
-new SFZ with instruments "borrowed" from the originals.
+Provides universal settings, styles, cached icons, and pixmaps, and the base
+class of windows which save and restore their own geometry.
 """
-import sys, os, argparse, logging, json, glob
-try:
-	from functools import cache
-except ImportError:
-	from functools import lru_cache as cache
+import logging
+from os.path import dirname, basename, splitext, join
+from glob import glob
+from functools import lru_cache
 from PyQt5.QtCore import QSettings
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QApplication, QSplitter
 from qt_extras import DevilBox
 from conn_jack import JackConnectError
 
 __version__ = "1.4.0"
 
-APP_NAME					= "kitbash"
-APP_PATH					= os.path.dirname(__file__)
+APPLICATION_NAME			= "kitbash"
+PACKAGE_DIR					= dirname(__file__)
 DEFAULT_STYLE				= 'system'
+AUDIO_ICON_SIZE				= 16
 KEY_STYLE					= 'Style'
 KEY_SAMPLES_MODE			= 'KitSaveDialog/SamplesMode'
 KEY_RECENT_DRUMKIT_FOLDER	= 'RecentDrumkitFolder'
@@ -45,69 +46,107 @@ KEY_RECENT_PROJECTS			= 'RecentProjects'
 KEY_SAMPLE_XPLORE_ROOT		= 'SampleExplorer/Root'
 KEY_SAMPLE_XPLORE_CURR		= 'SampleExplorer/Current'
 
-@cache
-def settings():
-	return QSettings('ZenSoSo', 'kitbash')
 
-@cache
+@lru_cache
+def __settings():
+	return QSettings('ZenSoSo', APPLICATION_NAME)
+
+def get_setting(key, default = None, type_ = None):
+	value = __settings().value(key, default)
+	if type_:
+		if value is None:
+			return type_()
+		if type_ is bool:
+			return value == '1'
+		return type_(value)
+	return value
+
+def set_setting(key, value):
+	if isinstance(value, bool):
+		value = '1' if value else '0'
+	__settings().setValue(key, value)
+
+def delete_setting(key):
+	__settings().remove(key)
+
+@lru_cache
 def styles():
 	return {
-		os.path.splitext(os.path.basename(path))[0] : path \
-		for path in glob.glob(os.path.join(APP_PATH, 'styles', '*.css'))
+		splitext(basename(path))[0] : path \
+		for path in glob(join(PACKAGE_DIR, 'styles', '*.css'))
 	}
 
 def set_application_style():
-	style = settings().value(KEY_STYLE, DEFAULT_STYLE)
+	style = get_setting(KEY_STYLE, DEFAULT_STYLE)
 	with open(styles()[style], 'r', encoding = 'utf-8') as cssfile:
 		QApplication.instance().setStyleSheet(cssfile.read())
 
-def main():
-	from kitbash.gui.main_window import MainWindow
-
-	p = argparse.ArgumentParser()
-	p.epilog = """
-	Write your help text!
+@lru_cache
+def group_expanded_icon():
 	"""
-	p.add_argument('Filename', type=str, nargs='?', help='SFZ file[s] to include at startup')
-	p.add_argument("--log-file", "-l", type=str, help="Log to this file")
-	p.add_argument("--verbose", "-v", action="store_true", help="Show more detailed debug information")
-	options = p.parse_args()
+	Defers loading of QPixmaps until a QGuiApplication is instantiated.
+	This is a Qt5 requirement.
+	"""
+	return QIcon(join(PACKAGE_DIR, 'res', 'group_expanded.svg'))
 
-	log_level = logging.DEBUG if options.verbose else logging.ERROR
-	log_format = "[%(filename)24s:%(lineno)4d] %(levelname)-8s %(message)s"
-	if options.log_file:
-		logging.basicConfig(
-			filename = options.log_file,
-			filemode = 'w',
-			level = log_level,
-			format = log_format
-		)
-	else:
-		logging.basicConfig(
-			level = log_level,
-			format = log_format
-		)
+@lru_cache
+def group_hidden_icon():
+	return QIcon(join(PACKAGE_DIR, 'res', 'group_hidden.svg'))
 
-	#-----------------------------------------------------------------------
-	# Annoyance fix per:
-	# https://stackoverflow.com/questions/986964/qt-session-management-error
-	try:
-		del os.environ['SESSION_MANAGER']
-	except KeyError:
-		pass
-	#-----------------------------------------------------------------------
+@lru_cache
+def remove_icon():
+	return QIcon.fromTheme('edit-delete')
 
-	app = QApplication([])
-	try:
-		main_window = MainWindow(options)
-	except JackConnectError:
-		DevilBox('Could not connect to JACK server. Is it running?')
-		sys.exit(1)
-	main_window.show()
-	sys.exit(app.exec())
+@lru_cache
+def audio_off_pixmap():
+	return QIcon.fromTheme('audio-volume-muted').pixmap(AUDIO_ICON_SIZE)
 
-if __name__ == "__main__":
-	sys.exit(main())
+@lru_cache
+def audio_on_pixmap():
+	return QIcon.fromTheme('audio-volume-high').pixmap(AUDIO_ICON_SIZE)
 
 
-#  end kitbash/__init__.py
+class GeometrySaver:
+	"""
+	Provides classes declared in this project which inherit from QDialog methods to
+	easily save/restore window / splitter geometry.
+
+	Geometry is saved in this project's QSettings accessed as "settings()"
+	"""
+
+	def restore_geometry(self):
+		if not hasattr(self, 'restoreGeometry'):
+			logging.error('Object of type %s has no "restoreGeometry" function',
+				self.__class__.__name__)
+			return
+		geometry = get_setting(self.__geometry_key())
+		if geometry is not None:
+			self.restoreGeometry(geometry)	# pylint: disable = no-member
+		# pylint: disable-next = no-member
+		for splitter in self.findChildren(QSplitter):
+			geometry = get_setting(self.__splitter_geometry_key(splitter))
+			if geometry is not None:
+				splitter.restoreState(geometry)	# pylint: disable = no-member
+
+	def save_geometry(self):
+		if not hasattr(self, 'saveGeometry'):
+			logging.error('Object of type %s has no "saveGeometry" function',
+				self.__class__.__name__)
+			return
+		set_setting(
+			self.__geometry_key(),
+			self.saveGeometry())	# pylint: disable = no-member
+		# pylint: disable-next = no-member
+		for splitter in self.findChildren(QSplitter):
+			set_setting(
+				self.__splitter_geometry_key(splitter),
+				splitter.saveState())	# pylint: disable = no-member
+
+	def __geometry_key(self):
+		return f'{self.__class__.__name__}/geometry'
+
+	def __splitter_geometry_key(self, splitter):
+		return f'{self.__class__.__name__}/{splitter.objectName()}/geometry'
+
+
+#  end kitbash/kitbash/__init__.py

@@ -10,7 +10,7 @@ dependencies = [
 	"conn_jack >= 1.2.0, <= 1.3.0",
 	"liquiphy",
 	"soundfile",
-	"sfzen >= 1.5.0, <= 2.0.0",
+	"sfzen >= 2.1.2",
 	"midi_notes >= 1.1.0",
 	"recent_items_list >= 1.1.1",
 	"soso_qt_extras >= 1.2.0"
@@ -20,7 +20,7 @@ dependencies = [
 Home = "https://github.com/Zen-Master-SoSo/kitbash"
 
 [project.scripts]
-kitbash = "kitbash:main"
+kitbash = "kitbash.__main__:main"
 kitcmd = "kitbash.scripts.bash_project:main"
 
 [build-system]
