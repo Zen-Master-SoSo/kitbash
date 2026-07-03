@@ -10,7 +10,7 @@ dependencies = [
 	"conn_jack >= 1.2.0, <= 1.3.0",
 	"liquiphy",
 	"soundfile",
-	"sfzen >= 2.1.2",
+	"sfzen >= 2.2.0",
 	"midi_notes >= 1.1.0",
 	"recent_items_list >= 1.1.1",
 	"soso_qt_extras >= 1.2.0"
