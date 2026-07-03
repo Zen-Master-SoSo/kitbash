@@ -301,6 +301,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 			self.slot_remove_drumkit(widget)
 		self.statusbar.showMessage('Cleared', MESSAGE_TIMEOUT)
 		self.set_dirty(False)
+		self.update_timer.start()
 
 	# -----------------------------------------------------------------
 	# Quit / close / signals
@@ -474,11 +475,11 @@ class MainWindow(QMainWindow, GeometrySaver):
 
 	@pyqtSlot(int)
 	def slot_note_on(self, pitch):
-		self.synth.noteon(0, pitch, self.spn_velocity.value())
+		self.audio.synth.noteon(0, pitch, self.spn_velocity.value())
 
 	@pyqtSlot(int)
 	def slot_note_off(self, pitch):
-		self.synth.noteoff(0, pitch)
+		self.audio.synth.noteoff(0, pitch)
 
 	# -----------------------------------------------------------------
 	# UI handling slots:

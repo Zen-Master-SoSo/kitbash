@@ -319,7 +319,6 @@ class GroupFrame(QFrame):
 	def __init__(self, group, parent):
 		super().__init__(parent)
 		self.setFrameShape(QFrame.NoFrame)
-		logging.debug(group.group_id)
 		self.setObjectName(group.group_id)	# GroupFrame identified by group_id
 		self.group_id = group.group_id
 		self.group_layout = QVBoxLayout()
