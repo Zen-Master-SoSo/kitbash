@@ -30,7 +30,7 @@ from PyQt5.QtWidgets import QApplication, QSplitter
 from qt_extras import DevilBox
 from conn_jack import JackConnectError
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 APPLICATION_NAME			= "kitbash"
 PACKAGE_DIR					= dirname(__file__)
