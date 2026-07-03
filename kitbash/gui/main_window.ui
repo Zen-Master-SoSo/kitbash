@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>982</width>
-    <height>768</height>
+    <width>769</width>
+    <height>479</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -30,23 +30,43 @@
     <item>
      <widget class="QFrame" name="frm_controls">
       <layout class="QHBoxLayout" name="horizontalLayout_2">
+       <property name="spacing">
+        <number>6</number>
+       </property>
        <property name="leftMargin">
-        <number>2</number>
+        <number>0</number>
        </property>
        <property name="topMargin">
-        <number>3</number>
+        <number>2</number>
        </property>
        <property name="rightMargin">
         <number>2</number>
        </property>
        <property name="bottomMargin">
-        <number>1</number>
+        <number>0</number>
        </property>
        <item>
-        <layout class="QHBoxLayout" name="hz5">
+        <layout class="QHBoxLayout" name="horizontalLayout">
          <property name="spacing">
-          <number>2</number>
+          <number>1</number>
          </property>
+         <item>
+          <widget class="QPushButton" name="b_new">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset theme="document-new">
+             <normaloff>.</normaloff>.</iconset>
+           </property>
+          </widget>
+         </item>
          <item>
           <widget class="QPushButton" name="b_open_project">
            <property name="sizePolicy">
@@ -59,7 +79,8 @@
             <string/>
            </property>
            <property name="icon">
-            <iconset theme="document-open"/>
+            <iconset theme="document-open">
+             <normaloff>.</normaloff>.</iconset>
            </property>
           </widget>
          </item>
@@ -85,30 +106,17 @@
          </item>
          <item>
           <widget class="QPushButton" name="b_save_kit">
-           <property name="text">
-            <string/>
-           </property>
-           <property name="icon">
-            <iconset theme="audio-x-generic"/>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="b_add_drumkit">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
              <horstretch>0</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
            </property>
-           <property name="toolTip">
-            <string>Add an existing drumkit to the mix</string>
-           </property>
            <property name="text">
             <string/>
            </property>
            <property name="icon">
-            <iconset theme="list-add">
+            <iconset theme="audio-x-generic">
              <normaloff>.</normaloff>.</iconset>
            </property>
           </widget>
@@ -116,18 +124,22 @@
         </layout>
        </item>
        <item>
-        <widget class="QLabel" name="lbl_bashed_sfz_filename">
-         <property name="minimumSize">
-          <size>
-           <width>35</width>
-           <height>0</height>
-          </size>
+        <widget class="QPushButton" name="b_add_drumkit">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
          </property>
          <property name="toolTip">
-          <string>Path to the current bashed kit</string>
+          <string>Add an existing drumkit to the mix</string>
          </property>
          <property name="text">
           <string/>
+         </property>
+         <property name="icon">
+          <iconset theme="list-add">
+           <normaloff>.</normaloff>.</iconset>
          </property>
         </widget>
        </item>
@@ -135,6 +147,12 @@
         <widget class="QPushButton" name="b_copy_path">
          <property name="enabled">
           <bool>true</bool>
+         </property>
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
          </property>
          <property name="toolTip">
           <string>Copy the path to the current bashed kit to the clipboard</string>
@@ -178,6 +196,9 @@
            <property name="toolTip">
             <string>Get MIDI input from this JACK client</string>
            </property>
+           <property name="sizeAdjustPolicy">
+            <enum>QComboBox::AdjustToContents</enum>
+           </property>
           </widget>
          </item>
         </layout>
@@ -199,6 +220,9 @@
            <property name="toolTip">
             <string>Send audio out to this JACK client</string>
            </property>
+           <property name="sizeAdjustPolicy">
+            <enum>QComboBox::AdjustToContents</enum>
+           </property>
           </widget>
          </item>
         </layout>
@@ -211,7 +235,7 @@
          <item>
           <widget class="QLabel" name="lbl3">
            <property name="text">
-            <string>Touch vel.:</string>
+            <string>Touch vel.</string>
            </property>
           </widget>
          </item>
@@ -289,8 +313,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>980</width>
-         <height>676</height>
+         <width>767</width>
+         <height>390</height>
         </rect>
        </property>
       </widget>
@@ -303,7 +327,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>982</width>
+     <width>769</width>
      <height>22</height>
     </rect>
    </property>
@@ -316,7 +340,8 @@
       <string>&amp;Recent Projects ...</string>
      </property>
      <property name="icon">
-      <iconset theme="document-open-recent"/>
+      <iconset theme="document-open-recent">
+       <normaloff>.</normaloff>.</iconset>
      </property>
     </widget>
     <addaction name="action_new_project"/>
@@ -339,7 +364,8 @@
       <string>St&amp;yle</string>
      </property>
      <property name="icon">
-      <iconset theme="preferences-desktop-theme"/>
+      <iconset theme="preferences-desktop-theme">
+       <normaloff>.</normaloff>.</iconset>
      </property>
     </widget>
     <addaction name="action_collapse_kits"/>
@@ -356,7 +382,8 @@
       <string>Recent &amp;Drumkits</string>
      </property>
      <property name="icon">
-      <iconset theme="document-open-recent"/>
+      <iconset theme="document-open-recent">
+       <normaloff>.</normaloff>.</iconset>
      </property>
     </widget>
     <addaction name="action_add_drumkit"/>
@@ -371,7 +398,8 @@
   <widget class="QStatusBar" name="statusbar"/>
   <action name="action_add_drumkit">
    <property name="icon">
-    <iconset theme="list-add"/>
+    <iconset theme="list-add">
+     <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
     <string>Load Drum&amp;Kit</string>
@@ -385,7 +413,8 @@
   </action>
   <action name="action_quit">
    <property name="icon">
-    <iconset theme="application-exit"/>
+    <iconset theme="application-exit">
+     <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
     <string>&amp;Quit</string>
@@ -399,7 +428,8 @@
   </action>
   <action name="action_new_project">
    <property name="icon">
-    <iconset theme="document-new"/>
+    <iconset theme="document-new">
+     <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
     <string>&amp;New</string>
@@ -413,7 +443,8 @@
   </action>
   <action name="action_save_project">
    <property name="icon">
-    <iconset theme="document-save"/>
+    <iconset theme="document-save">
+     <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
     <string>Save &amp;Project</string>
@@ -424,7 +455,8 @@
   </action>
   <action name="action_reload_style">
    <property name="icon">
-    <iconset theme="view-refresh"/>
+    <iconset theme="view-refresh">
+     <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
     <string>Reload style</string>
@@ -438,7 +470,8 @@
   </action>
   <action name="action_collapse_kits">
    <property name="icon">
-    <iconset theme="go-up"/>
+    <iconset theme="go-up">
+     <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
     <string>Collapse &amp;Kits</string>
@@ -452,7 +485,8 @@
   </action>
   <action name="action_open_project">
    <property name="icon">
-    <iconset theme="document-open"/>
+    <iconset theme="document-open">
+     <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
     <string>&amp;Open project</string>
@@ -466,7 +500,8 @@
   </action>
   <action name="action_save_bashed_kit">
    <property name="icon">
-    <iconset theme="audio-x-generic"/>
+    <iconset theme="audio-x-generic">
+     <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
     <string>&amp;Save bashed kit</string>
@@ -480,7 +515,8 @@
   </action>
   <action name="action_save_project_as">
    <property name="icon">
-    <iconset theme="document-save-as"/>
+    <iconset theme="document-save-as">
+     <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
     <string>Save Project As</string>
@@ -494,7 +530,8 @@
   </action>
   <action name="action_remove_all_kits">
    <property name="icon">
-    <iconset theme="edit-clear"/>
+    <iconset theme="edit-clear">
+     <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
     <string>Remove All Drumkits</string>

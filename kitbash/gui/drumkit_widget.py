@@ -21,14 +21,32 @@
 Provides MainWindow.
 """
 import logging
-from os.path import basename
-from functools import partial
+from os.path import basename, join
+from functools import partial, lru_cache
 from PyQt5.QtCore import (Qt, QObject, pyqtSignal, pyqtSlot, QSize)
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout, QLabel,
 	QFrame, QSizePolicy, QPushButton, QCheckBox)
 from qt_extras import SigBlock
 from sfzen.drumkits import PercussionInstrument
-from kitbash import group_expanded_icon, group_hidden_icon, remove_icon
+from kitbash import PACKAGE_DIR
+
+
+@lru_cache
+def group_expanded_icon():
+	"""
+	Defers loading of QPixmaps until a QGuiApplication is instantiated.
+	This is a Qt5 requirement.
+	"""
+	return QIcon(join(PACKAGE_DIR, 'res', 'group_expanded.svg'))
+
+@lru_cache
+def group_hidden_icon():
+	return QIcon(join(PACKAGE_DIR, 'res', 'group_hidden.svg'))
+
+@lru_cache
+def remove_icon():
+	return QIcon.fromTheme('edit-delete')
 
 
 class DrumkitWidget(QFrame):
@@ -112,8 +130,8 @@ class DrumkitWidget(QFrame):
 		Fills the groups and instruments of this the DrumkitWidget.
 		"""
 		self.drumkit = drumkit
-		for group in self.drumkit.groups.values():
-			if group.empty():
+		for group in self.drumkit.percussion_groups.values():
+			if group.is_empty():
 				continue
 			group_frame = GroupFrame(group, self)
 			group_frame.group_button.clicked.connect(partial(self.slot_group_clicked, group_frame))
@@ -301,6 +319,7 @@ class GroupFrame(QFrame):
 	def __init__(self, group, parent):
 		super().__init__(parent)
 		self.setFrameShape(QFrame.NoFrame)
+		logging.debug(group.group_id)
 		self.setObjectName(group.group_id)	# GroupFrame identified by group_id
 		self.group_id = group.group_id
 		self.group_layout = QVBoxLayout()

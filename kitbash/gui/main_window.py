@@ -22,7 +22,7 @@ Provides MainWindow.
 """
 import logging, json
 from tempfile import mkstemp
-from os import fdopen, getcwd
+from os import getcwd, unlink
 from os.path import dirname, realpath, exists, join, splitext
 from functools import partial
 from signal import signal, SIGINT, SIGTERM
@@ -48,7 +48,7 @@ from kitbash.gui.kit_save_dialog import KitSaveDialog
 
 
 UPDATES_DEBOUNCE = 680
-MESSAGE_TIMEOUT = 3000
+MESSAGE_TIMEOUT = 2400
 
 
 # pylint: disable-next = missing-class-docstring
@@ -85,6 +85,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.project_loading = False
 		self.saved_sfz_filename = None
 		self.saved_sfz_samples_mode = None
+		_, self.tempfile = mkstemp(prefix = 'kitbash', suffix = '.sfz')
 		# Setup update_timer which will trigger a rewrite of the output SFZ only after an interval:
 		self.update_timer = QTimer()
 		self.update_timer.setSingleShot(True)
@@ -98,7 +99,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.fill_style_menu()
 		self.setup_kits_area()
 		self.restore_geometry()
-		self.connect_actions()
+		self.connect_signals()
 		self.update_ui()
 		QTimer.singleShot(0, self.layout_complete)
 
@@ -114,7 +115,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.drumkit_widgets.setSpacing(2)
 		self.kits_area.setLayout(self.drumkit_widgets)
 
-	def connect_actions(self):
+	def connect_signals(self):
 		self.action_collapse_kits.triggered.connect(self.slot_collapse_kits)
 		self.action_new_project.triggered.connect(self.slot_new_project)
 		self.action_open_project.triggered.connect(self.slot_open_project)
@@ -129,6 +130,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.menu_recent_drumkits.aboutToShow.connect(self.slot_show_recent_drumkits)
 		self.kits_area.setContextMenuPolicy(Qt.CustomContextMenu)
 		self.kits_area.customContextMenuRequested.connect(self.slot_kits_context_menu)
+		self.b_new.clicked.connect(self.slot_new_project)
 		self.b_open_project.clicked.connect(self.slot_open_project)
 		self.b_save_project.clicked.connect(self.slot_save_project)
 		self.b_save_kit.clicked.connect(self.slot_save_kit)
@@ -139,6 +141,10 @@ class MainWindow(QMainWindow, GeometrySaver):
 			self.audio.slot_midi_src_selected)
 		self.cmb_audio_sinks.currentTextChanged.connect(
 			self.audio.slot_audio_sink_selected)
+		self.audio.sig_sources_changed.connect(
+			self.slot_sources_changed)
+		self.audio.sig_sinks_changed.connect(
+			self.slot_sinks_changed)
 
 	def update_ui(self):
 		title = APPLICATION_NAME \
@@ -156,8 +162,6 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.b_save_project.setEnabled(has_kits)
 		self.b_save_kit.setEnabled(has_kits)
 		self.b_copy_path.setVisible(bool(self.saved_sfz_filename))
-		self.lbl_bashed_sfz_filename.setText(self.saved_sfz_filename \
-			if self.saved_sfz_filename else '')
 
 	# -----------------------------------------------------------------
 	# Style functions:
@@ -252,7 +256,6 @@ class MainWindow(QMainWindow, GeometrySaver):
 		kit.default_path = dirname(self.saved_sfz_filename)
 		try:
 			kit.save_as(self.saved_sfz_filename, self.saved_sfz_samples_mode)
-			self.lbl_bashed_sfz_filename.setText(self.saved_sfz_filename)
 			logging.debug('Saved bashed SFZ at %s', self.saved_sfz_filename)
 			self.statusbar.showMessage(f'Saved {self.saved_sfz_filename}', MESSAGE_TIMEOUT)
 		except OSError as e:
@@ -310,6 +313,8 @@ class MainWindow(QMainWindow, GeometrySaver):
 		if self.okay_to_clear():
 			self.audio.quit()
 			self.save_geometry()
+			if exists(self.tempfile):
+				unlink(self.tempfile)
 			logging.debug('Total %d xruns', self.current_xruns)
 			event.accept()
 		else:
@@ -445,7 +450,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 			source_widget.deselect_parent_group(inst_id)
 		self.set_dirty()
 		self.update_timer.start()
-		self.statusbar.showMessage('updating ...', MESSAGE_TIMEOUT)
+		self.statusbar.showMessage('Preparing to update ...', MESSAGE_TIMEOUT)
 
 	@pyqtSlot()
 	def slot_timer_timeout(self):
@@ -462,14 +467,10 @@ class MainWindow(QMainWindow, GeometrySaver):
 		Triggered from KitBasher signal when bashing is finished.
 		"""
 		self.bashed_kit = bashed_kit
-		for sample in self.bashed_kit.samples():
-			sample.use_abspath()
-		fd, path = mkstemp(suffix = '.sfz')
-		with fdopen(fd, 'w') as fob:
+		with open(self.tempfile, 'w') as fob:
 			self.bashed_kit.write(fob)
-		logging.debug('saved bashed kit: %s', path)
-		self.audio.synth.load(path)	# pylint: disable = no-member
-		self.statusbar.showMessage('Current working Drumkit updated', MESSAGE_TIMEOUT)
+		self.audio.synth.load(self.tempfile)	# pylint: disable = no-member
+		self.statusbar.showMessage('Drumkit updated', MESSAGE_TIMEOUT)
 
 	@pyqtSlot(int)
 	def slot_note_on(self, pitch):
@@ -649,8 +650,9 @@ class MainWindow(QMainWindow, GeometrySaver):
 
 	@pyqtSlot()
 	def slot_copy_kit_path(self):
-		QApplication.instance().clipboard().setText(self.lbl_bashed_sfz_filename.text())
-		self.statusbar.showMessage('Copied path to clipboard.', MESSAGE_TIMEOUT)
+		QApplication.instance().clipboard().setText(self.saved_sfz_filename)
+		self.statusbar.showMessage(f'Copied "{self.saved_sfz_filename}" to clipboard.',
+			MESSAGE_TIMEOUT)
 
 
 

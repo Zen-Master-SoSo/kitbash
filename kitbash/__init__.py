@@ -26,7 +26,6 @@ from os.path import dirname, basename, splitext, join
 from glob import glob
 from functools import lru_cache
 from PyQt5.QtCore import QSettings
-from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QSplitter
 from qt_extras import DevilBox
 from conn_jack import JackConnectError
@@ -80,30 +79,6 @@ def set_application_style():
 	style = get_setting(KEY_STYLE, DEFAULT_STYLE)
 	with open(styles()[style], 'r', encoding = 'utf-8') as cssfile:
 		QApplication.instance().setStyleSheet(cssfile.read())
-
-@lru_cache
-def group_expanded_icon():
-	"""
-	Defers loading of QPixmaps until a QGuiApplication is instantiated.
-	This is a Qt5 requirement.
-	"""
-	return QIcon(join(PACKAGE_DIR, 'res', 'group_expanded.svg'))
-
-@lru_cache
-def group_hidden_icon():
-	return QIcon(join(PACKAGE_DIR, 'res', 'group_hidden.svg'))
-
-@lru_cache
-def remove_icon():
-	return QIcon.fromTheme('edit-delete')
-
-@lru_cache
-def audio_off_pixmap():
-	return QIcon.fromTheme('audio-volume-muted').pixmap(AUDIO_ICON_SIZE)
-
-@lru_cache
-def audio_on_pixmap():
-	return QIcon.fromTheme('audio-volume-high').pixmap(AUDIO_ICON_SIZE)
 
 
 class GeometrySaver:

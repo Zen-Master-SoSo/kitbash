@@ -3,6 +3,10 @@
 	font-size: 10pt;
 }
 
+#frm_controls QComboBox {
+	font-size: 10pt;
+}
+
 #frm_top QLabel {
 	color: #4D4D4D;
 	font-size: 10pt;
@@ -61,5 +65,77 @@ DrumkitWidget InstrumentButton QLabel {
 
 DrumkitWidget InstrumentButton QCheckBox {
 	padding: 2px 1px;
+}
+
+/*
+GroupFrame widget widths based on expected content:
+*/
+
+#bass_drums {
+	min-width: 131px;
+}
+
+#snares {
+	min-width: 107px;
+}
+
+#tom_toms {
+	min-width: 113px;
+}
+
+#high_hats {
+	min-width: 100px;
+}
+
+#crashes {
+	min-width: 100px;
+}
+
+#rides {
+	min-width: 107px;
+}
+
+#other_cymbals {
+	min-width: 113px;
+}
+
+#bongos {
+	min-width: 90px;
+}
+
+#congas {
+	min-width: 113px;
+}
+
+#agogos {
+	min-width: 93px;
+}
+
+#timbales {
+	min-width: 100px;
+}
+
+#guiros {
+	min-width: 91px;
+}
+
+#woodblocks {
+	min-width: 119px;
+}
+
+#triangles {
+	min-width: 104px;
+}
+
+#cuica {
+	min-width: 91px;
+}
+
+#whistle {
+	min-width: 101px;
+}
+
+#others {
+	min-width: 97px;
 }
 
