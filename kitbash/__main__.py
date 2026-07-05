@@ -22,9 +22,8 @@ kitbash is a program you can use to combine parts of various SFZ files into a
 new SFZ with instruments "borrowed" from the originals.
 """
 import sys, os, argparse, logging
-from PyQt5.QtWidgets import QApplication
-from qt_extras import DevilBox
-from conn_jack import JackConnectError
+from PyQt5.QtWidgets import QApplication, QErrorMessage
+from qt_extras import exceptions_hook
 from kitbash.gui.main_window import MainWindow
 
 
@@ -61,11 +60,8 @@ def main():
 	#-----------------------------------------------------------------------
 
 	app = QApplication([])
-	try:
-		main_window = MainWindow(options)
-	except JackConnectError:
-		DevilBox('Could not connect to JACK server. Is it running?')
-		sys.exit(1)
+	sys.excepthook = exceptions_hook
+	main_window = MainWindow(options)
 	main_window.show()
 	sys.exit(app.exec())
 

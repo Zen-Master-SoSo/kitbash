@@ -18,9 +18,8 @@
 #  MA 02110-1301, USA.
 #
 """
-Provides MainWindow.
+Provides worker threads that load and bash drumkits.
 """
-import logging
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QRunnable
 from sfzen.drumkits import Drumkit
 
@@ -36,7 +35,7 @@ class KitWorkerSignals(QObject):
 
 class KitLoader(QRunnable):
 	"""
-	Loads a Drumkit in a background thread and emits "sig_drumkit_loaded" when done.
+	Loads a Drumkit in a background thread.
 	"""
 
 	def __init__(self, drumkit_widget):
@@ -47,6 +46,7 @@ class KitLoader(QRunnable):
 	@pyqtSlot()
 	def run(self):
 		drumkit = Drumkit(self.drumkit_widget.sfz_filename)
+		drumkit.midi_channel = 10 if 'lochan' in drumkit.opcodes_used() else 0
 		self.signals.sig_loaded.emit(self.drumkit_widget, drumkit)
 
 

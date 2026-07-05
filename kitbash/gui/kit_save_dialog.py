@@ -20,7 +20,6 @@
 """
 Provides KitSaveDialog.
 """
-import logging
 from os.path import realpath, splitext
 from functools import partial
 from PyQt5.QtCore import Qt, pyqtSlot, QCoreApplication

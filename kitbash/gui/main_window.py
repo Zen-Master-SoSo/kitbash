@@ -31,18 +31,18 @@ from PyQt5.QtCore import Qt, QObject, pyqtSlot, QTimer, QThreadPool, QPoint, QCo
 from PyQt5.QtWidgets import (
 	QApplication, QMainWindow, QMessageBox, QFileDialog, QAction, QActionGroup, QMenu)
 from PyQt5.QtGui import QIcon
-from qt_extras import ShutUpQT, SigBlock, DevilBox
+from qt_extras import ShutUpQT, DevilBox
 from qt_extras.list_layout import VListLayout
 from recent_items_list import RecentItemsList
 from sfzen import SAMPLES_ABSPATH
 from sfzen.drumkits import Drumkit
 from kitbash import (
 	APPLICATION_NAME, PACKAGE_DIR, DEFAULT_STYLE,
-	styles, set_application_style, get_setting, set_setting, GeometrySaver,
-	KEY_STYLE, KEY_SAMPLES_MODE, KEY_RECENT_DRUMKIT_FOLDER, KEY_RECENT_DRUMKITS,
+	styles, set_application_style, get_setting, set_setting, GeometrySaver, audio,
+	KEY_PREVIEW_VELOCITY, KEY_STYLE, KEY_SAMPLES_MODE,
+	KEY_RECENT_DRUMKIT_FOLDER, KEY_RECENT_DRUMKITS,
 	KEY_RECENT_PROJECT_FOLDER, KEY_RECENT_PROJECTS)
 from kitbash.worker_threads import KitLoader, KitBasher
-from kitbash.jack_audio import Audio
 from kitbash.gui.drumkit_widget import DrumkitWidget
 from kitbash.gui.kit_save_dialog import KitSaveDialog
 
@@ -94,7 +94,18 @@ class MainWindow(QMainWindow, GeometrySaver):
 		# Setup background threadpool for KitLoader and KitBasher workers
 		self.background_threadpool = QThreadPool()
 		# Setup jack audio
-		self.audio = Audio()
+		self.audio = audio()
+		# Setup source/sink combo boxes:
+		self.cmb_midi_sources = self.audio.midi_in_combo_box(self)
+		self.lo_source_combo.replaceWidget(self.cmb_midi_src_placeholder, self.cmb_midi_sources)
+		self.cmb_midi_src_placeholder.setVisible(False)
+		self.cmb_midi_src_placeholder.deleteLater()
+		del self.cmb_midi_src_placeholder
+		self.cmb_audio_sinks = self.audio.audio_out_combo_box(self)
+		self.lo_sink_combo.replaceWidget(self.cmb_audio_sink_placeholder, self.cmb_audio_sinks)
+		self.cmb_audio_sink_placeholder.setVisible(False)
+		self.cmb_audio_sink_placeholder.deleteLater()
+		del self.cmb_audio_sink_placeholder
 		# Setup GUI elements
 		self.fill_style_menu()
 		self.setup_kits_area()
@@ -122,7 +133,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.action_save_project.triggered.connect(self.slot_save_project)
 		self.action_save_project_as.triggered.connect(self.slot_save_project_as)
 		self.action_save_bashed_kit.triggered.connect(self.slot_save_kit)
-		self.action_save_kit_as.triggered.connect(self.slot_save_kit_as)
+		self.action_save_bashed_kit_as.triggered.connect(self.slot_save_kit_as)
 		self.action_add_drumkit.triggered.connect(self.slot_add_drumkit)
 		self.action_remove_all_kits.triggered.connect(self.slot_remove_all_kits)
 		self.action_reload_style.triggered.connect(self.slot_reload_style)
@@ -137,14 +148,8 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.b_copy_path.clicked.connect(self.slot_copy_kit_path)
 		self.b_add_drumkit.clicked.connect(self.slot_add_drumkit)
 		self.b_xruns.clicked.connect(self.slot_xruns_clicked)
-		self.cmb_midi_srcs.currentTextChanged.connect(
-			self.audio.slot_midi_src_selected)
-		self.cmb_audio_sinks.currentTextChanged.connect(
-			self.audio.slot_audio_sink_selected)
-		self.audio.sig_sources_changed.connect(
-			self.slot_sources_changed)
-		self.audio.sig_sinks_changed.connect(
-			self.slot_sinks_changed)
+		self.spn_velocity.valueChanged.connect(self.slot_velocity_value_changed)
+		self.audio.sig_jack_ready.connect(self.slot_jack_ready)
 
 	def update_ui(self):
 		title = APPLICATION_NAME \
@@ -158,7 +163,11 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.action_new_project.setEnabled(has_kits)
 		self.action_save_project.setEnabled(has_kits and self.dirty)
 		self.action_save_project_as.setEnabled(has_kits)
-		self.action_save_bashed_kit.setEnabled(has_kits)
+		self.action_save_bashed_kit.setEnabled(has_kits and self.saved_sfz_filename is not None)
+		self.action_save_bashed_kit.setText(
+			'Save bashed kit' if self.saved_sfz_filename is None
+			else f'Save "{self.saved_sfz_filename}"')
+		self.action_save_bashed_kit_as.setEnabled(has_kits)
 		self.b_save_project.setEnabled(has_kits)
 		self.b_save_kit.setEnabled(has_kits)
 		self.b_copy_path.setVisible(bool(self.saved_sfz_filename))
@@ -218,7 +227,6 @@ class MainWindow(QMainWindow, GeometrySaver):
 		Starts project load; saves recent file name.
 		Permission to clear must already have been given.
 		"""
-		logging.debug('load_project %s', filename)
 		if exists(filename):
 			try:
 				with open(filename, 'r', encoding = 'utf-8') as fh:
@@ -250,18 +258,6 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.register_recent_project()
 		self.set_dirty(False)
 		self.statusbar.showMessage(f'Saved project at {self.project_filename}', MESSAGE_TIMEOUT)
-
-	def save_kit(self):
-		kit = self.bashed_kit.simplified()
-		kit.default_path = dirname(self.saved_sfz_filename)
-		try:
-			kit.save_as(self.saved_sfz_filename, self.saved_sfz_samples_mode)
-			logging.debug('Saved bashed SFZ at %s', self.saved_sfz_filename)
-			self.statusbar.showMessage(f'Saved {self.saved_sfz_filename}', MESSAGE_TIMEOUT)
-		except OSError as e:
-			DevilBox('Hardlinks between devices are not allowed.\n' +\
-				'Choose a different path or sample mode.' if e.errno == 18 \
-				else str(e))
 
 	def register_recent_project(self):
 		self.recent_projects.bump(self.project_filename)
@@ -332,41 +328,10 @@ class MainWindow(QMainWindow, GeometrySaver):
 	# -----------------------------------------------------------------
 	# JACK audio / source / sink management
 
-	@pyqtSlot(int)
-	def slot_jack_ready(self, samplerate):
-		self.lbl_jack_state.setText(f'JACK samplerate: {samplerate}')
-
-	@pyqtSlot()
-	def slot_jack_down(self):
-		self.lbl_jack_state.setText('JACK is down')
-
-	@pyqtSlot()
-	def slot_sources_changed(self):
-		with SigBlock(self.cmb_midi_srcs):
-			self.cmb_midi_srcs.clear()
-			self.cmb_midi_srcs.addItem('')
-			for port in self.audio.conn_man.output_ports():
-				if port.is_midi:
-					self.cmb_midi_srcs.addItem(port.name)
-			if self.audio.synth.connected_midi_src_port:
-				self.cmb_midi_srcs.setCurrentText(self.audio.midi_src)
-
-	@pyqtSlot()
-	def slot_sinks_changed(self):
-		with SigBlock(self.cmb_audio_sinks):
-			self.cmb_audio_sinks.clear()
-			self.cmb_audio_sinks.addItem('')
-			valid_clients = set(
-				port.client_name for port in self.audio.conn_man.input_ports()
-				if port.is_audio )
-			for client in valid_clients:
-				self.cmb_audio_sinks.addItem(client)
-			if self.audio.synth.connected_audio_sink_ports:
-				self.cmb_audio_sinks.setCurrentText(self.audio.audio_sink)
-
-	@pyqtSlot(str)
-	def slot_midi_connected(self, port_name):
-		self.statusbar.showMessage(f'Connected to "{port_name}"', MESSAGE_TIMEOUT)
+	@pyqtSlot(bool, int)
+	def slot_jack_ready(self, state, _):
+		if not state:
+			DevilBox('JACK is down')
 
 	# -----------------------------------------------------------------
 	# Drumkit load / delete / instrument selection
@@ -402,8 +367,6 @@ class MainWindow(QMainWindow, GeometrySaver):
 		"""
 		drumkit_widget.set_drumkit(drumkit)
 		drumkit_widget.sig_inst_toggle.connect(self.slot_inst_toggle)
-		drumkit_widget.sig_note_on.connect(self.slot_note_on)
-		drumkit_widget.sig_note_off.connect(self.slot_note_off)
 		drumkit_widget.sig_remove_drumkit.connect(self.slot_remove_drumkit)
 		if self.project_loading:
 			drumkit_widget.apply_selections(
@@ -468,26 +431,23 @@ class MainWindow(QMainWindow, GeometrySaver):
 		Triggered from KitBasher signal when bashing is finished.
 		"""
 		self.bashed_kit = bashed_kit
-		with open(self.tempfile, 'w') as fob:
-			self.bashed_kit.write(fob)
-		self.audio.synth.load(self.tempfile)	# pylint: disable = no-member
+		self.audio.load_kit(self.bashed_kit)
 		self.statusbar.showMessage('Drumkit updated', MESSAGE_TIMEOUT)
-
-	@pyqtSlot(int)
-	def slot_note_on(self, pitch):
-		self.audio.synth.noteon(0, pitch, self.spn_velocity.value())
-
-	@pyqtSlot(int)
-	def slot_note_off(self, pitch):
-		self.audio.synth.noteoff(0, pitch)
 
 	# -----------------------------------------------------------------
 	# UI handling slots:
 
+	@pyqtSlot(int)
+	def slot_velocity_value_changed(self, value):
+		"""
+		Triggered by spn_velocity.valueChanged
+		"""
+		set_setting(KEY_PREVIEW_VELOCITY, value)
+
 	@pyqtSlot()
 	def slot_xruns_clicked(self):
 		"""
-		Triggered by b_xruns.click()
+		Triggered by b_xruns.click
 		"""
 		self.base_xruns = self.current_xruns
 		self.b_xruns.setText('0')
@@ -616,15 +576,26 @@ class MainWindow(QMainWindow, GeometrySaver):
 	@pyqtSlot()
 	def slot_save_kit(self):
 		if self.saved_sfz_filename is None:
-			self.slot_save_kit_as()
+			return self.slot_save_kit_as()
+		try:
+			self.bashed_kit.save_as(
+				self.saved_sfz_filename, samples_mode = self.saved_sfz_samples_mode)
+		except OSError as e:
+			if e.errno == 18:
+				DevilBox('Hardlinks between devices are not allowed.\n' +
+					'Choose a different path or sample mode.')
+			elif e.errno == 2:
+				return self.slot_save_kit_as()
+			else:
+				DevilBox(str(e))
 		else:
-			self.save_kit()
+			self.statusbar.showMessage(f'Saved {self.saved_sfz_filename}', MESSAGE_TIMEOUT)
+			self.update_ui()
 
 	@pyqtSlot()
 	def slot_save_kit_as(self):
 		"""
 		Triggered by "File -> Save bashed kit" menu
-		See also: slot_drumkit_bashed
 		"""
 		dlg = KitSaveDialog(self,
 			int(get_setting(KEY_SAMPLES_MODE, SAMPLES_ABSPATH)) \
@@ -633,7 +604,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		if dlg.exec_() and dlg.selected_file:
 			self.saved_sfz_filename = dlg.selected_file
 			self.saved_sfz_samples_mode = dlg.samples_mode
-			self.save_kit()
+			self.slot_save_kit()
 
 	@pyqtSlot()
 	def slot_add_drumkit(self):

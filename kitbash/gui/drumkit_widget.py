@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (QApplication, QVBoxLayout, QHBoxLayout, QLabel,
 	QFrame, QSizePolicy, QPushButton, QCheckBox)
 from qt_extras import SigBlock
 from sfzen.drumkits import PercussionInstrument
-from kitbash import PACKAGE_DIR
+from kitbash import PACKAGE_DIR, KEY_PREVIEW_VELOCITY, get_setting, audio
 
 
 @lru_cache
@@ -64,9 +64,9 @@ class DrumkitWidget(QFrame):
 		self.sfz_filename = filename
 		self.moniker = basename(self.sfz_filename)
 		self.drumkit = None
-		self.port_number = None
-		self.initial_height = None
+		self.synth = None
 
+		self.initial_height = None
 		self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
 
 		main_layout = QVBoxLayout()
@@ -130,6 +130,7 @@ class DrumkitWidget(QFrame):
 		Fills the groups and instruments of this the DrumkitWidget.
 		"""
 		self.drumkit = drumkit
+		self.synth = audio().create_synth(self.sfz_filename)
 		for group in self.drumkit.percussion_groups.values():
 			if group.is_empty():
 				continue
@@ -162,14 +163,21 @@ class DrumkitWidget(QFrame):
 		"""
 		Triggered by InstrumentButton mouse press.
 		"""
-		self.sig_note_on.emit(inst.pitch)
+		self.synth.noteon(
+			self.drumkit.midi_channel,
+			inst.pitch,
+			get_setting(KEY_PREVIEW_VELOCITY, 80, int)
+		)
 
 	@pyqtSlot(PercussionInstrument)
 	def slot_instrument_released(self, inst):
 		"""
 		Triggered by InstrumentButton mouse relase.
 		"""
-		self.sig_note_off.emit(inst.pitch)
+		self.synth.noteoff(
+			self.drumkit.midi_channel,
+			inst.pitch
+		)
 
 	@pyqtSlot(QPushButton)
 	def slot_instrument_toggled(self, button):
@@ -187,6 +195,7 @@ class DrumkitWidget(QFrame):
 		"""
 		Triggered by the "remove" button click event.
 		"""
+		audio().delete_synth(self.synth)
 		self.sig_remove_drumkit.emit(self)
 
 	@pyqtSlot(bool)

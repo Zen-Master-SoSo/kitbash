@@ -28,7 +28,6 @@ from functools import lru_cache
 from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QApplication, QSplitter
 from qt_extras import DevilBox
-from conn_jack import JackConnectError
 
 __version__ = "1.5.2"
 
@@ -36,6 +35,7 @@ APPLICATION_NAME			= "kitbash"
 PACKAGE_DIR					= dirname(__file__)
 DEFAULT_STYLE				= 'system'
 AUDIO_ICON_SIZE				= 16
+KEY_PREVIEW_VELOCITY		= 'PreviewVelocity'
 KEY_STYLE					= 'Style'
 KEY_SAMPLES_MODE			= 'KitSaveDialog/SamplesMode'
 KEY_RECENT_DRUMKIT_FOLDER	= 'RecentDrumkitFolder'
@@ -44,7 +44,15 @@ KEY_RECENT_PROJECT_FOLDER	= 'RecentProjectFolder'
 KEY_RECENT_PROJECTS			= 'RecentProjects'
 KEY_SAMPLE_XPLORE_ROOT		= 'SampleExplorer/Root'
 KEY_SAMPLE_XPLORE_CURR		= 'SampleExplorer/Current'
+KEY_MIDI_SOURCE				= 'MIDISource'
+KEY_AUDIO_SINK				= 'AudioSink'
 
+
+def audio():
+	if not hasattr(audio, 'instance'):
+		from kitbash.jack_audio import Audio
+		audio.instance = Audio()
+	return audio.instance
 
 @lru_cache
 def __settings():

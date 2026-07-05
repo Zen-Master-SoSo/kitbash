@@ -6,14 +6,12 @@ license = {file = "LICENSE"}
 classifiers = ["License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)"]
 dynamic = ["version", "description"]
 dependencies = [
+	"log_soso >= 1.0.3",
 	"PyQt5",
-	"conn_jack >= 1.3.2",
-	"liquiphy",
-	"soundfile",
-	"sfzen >= 2.2.0",
-	"midi_notes >= 1.1.0",
-	"recent_items_list >= 1.1.1",
-	"soso_qt_extras >= 1.2.0"
+	"qt_liquid_pool >= 1.2.0",
+	"recent_items_list >= 1.1.2",
+	"sfzen >= 2.3.1",
+	"soso_qt_extras >= 1.7.0"
 ]
 
 [project.urls]
