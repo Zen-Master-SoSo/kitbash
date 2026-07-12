@@ -45,6 +45,7 @@ from kitbash import (
 from kitbash.worker_threads import KitLoader, KitBasher
 from kitbash.gui.drumkit_widget import DrumkitWidget
 from kitbash.gui.kit_save_dialog import KitSaveDialog
+from kitbash.install import install
 
 
 UPDATES_DEBOUNCE = 680
@@ -119,6 +120,7 @@ class MainWindow(QMainWindow, GeometrySaver):
 		self.audio.connect()
 		if self.options.Filename:
 			self.load_project(self.options.Filename)
+		install()
 
 	def setup_kits_area(self):
 		self.drumkit_widgets = VListLayout(end_space = 10)

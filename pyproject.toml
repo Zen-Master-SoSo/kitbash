@@ -10,8 +10,9 @@ dependencies = [
 	"PyQt5",
 	"qt_liquid_pool >= 1.2.0",
 	"recent_items_list >= 1.1.2",
-	"sfzen >= 2.3.1",
-	"soso_qt_extras >= 1.7.0"
+	"sfzen >= 2.3.2",
+	"soso_qt_extras >= 1.7.0",
+	"xdg_soso >= 0.2.0"
 ]
 
 [project.urls]
