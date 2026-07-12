@@ -29,7 +29,7 @@ from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QApplication, QSplitter
 from qt_extras import DevilBox
 
-__version__ = "1.7.0"
+__version__ = "1.8.0"
 
 APPLICATION_NAME			= "kitbash"
 PACKAGE_DIR					= dirname(__file__)
