@@ -16,6 +16,8 @@ finished drumkit to a new SFZ.
 
 ## Usage
 
+<img width="624" height="329" alt="kitbash-empty-window" src="https://github.com/user-attachments/assets/0b0295be-34d7-4873-9576-82b50b8d5876" />
+
 Starting with an empty project, use the "Edit" -> "Load Drumkit" menu, or click
 on the "plus" symbol in the toolbar. You'll see all the instruments defined in
 the drumkit you just loaded, grouped into categories, such as "Snares", "Tom
@@ -43,6 +45,9 @@ a MIDI keyboard, or the MIDI output of another program, such as
 The instruments selected to be included in your final drumkit are indicated by
 the check boxes next to the instrument and category names.
 
+<img width="887" height="421" alt="kitbash-window" src="https://github.com/user-attachments/assets/56122b21-a409-4ff2-a22d-bdba960f7a91" />
+
+
 Check the box next to a category to select all the instruments in that category
 for inclusion in your new drumkit. Check the checkbox next to any individual
 instrument (i.e. "Ride Bell"), to include only that instrument.
@@ -56,7 +61,7 @@ You can make changes while playing a loop from the incoming MIDI source, and
 the changes are (almost) immediately made to the "bashed" drumkit you are
 making.
 
-### Exporting SFZ
+### Exporting an SFZ
 
 When you're satisfied with what you've selected, you can save the "bashed"
 drumkit as an .sfz file in a new location. From the menu, select "File" ->
