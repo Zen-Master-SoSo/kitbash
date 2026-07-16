@@ -27,7 +27,8 @@ from os.path import dirname, realpath, exists, join, splitext
 from functools import partial
 from signal import signal, SIGINT, SIGTERM
 from PyQt5 import uic
-from PyQt5.QtCore import Qt, QObject, pyqtSlot, QTimer, QThreadPool, QPoint, QCoreApplication
+from PyQt5.QtCore import (
+	Qt, QObject, pyqtSlot, QTimer, QThreadPool, QPoint, QSize, QCoreApplication)
 from PyQt5.QtWidgets import (
 	QApplication, QMainWindow, QMessageBox, QFileDialog, QAction, QActionGroup, QMenu)
 from PyQt5.QtGui import QIcon
@@ -72,6 +73,8 @@ class MainWindow(QMainWindow, GeometrySaver):
 		with ShutUpQT():
 			uic.loadUi(join(PACKAGE_DIR, 'gui', 'main_window.ui'), self)
 		self.setWindowIcon(QIcon(join(PACKAGE_DIR, 'res', 'kitbash-icon.png')))
+		self.b_save_kit.setIcon(QIcon(join(PACKAGE_DIR, 'res', 'save-sfz-icon.svg')))
+		self.b_save_kit.setIconSize(QSize(20, 20))
 		# Setup signals
 		signal(SIGINT, self.system_signal)
 		signal(SIGTERM, self.system_signal)
