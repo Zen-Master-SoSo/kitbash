@@ -22,21 +22,23 @@ Install phoney-dictate as an application on XDG-compliant systems (like gnome).
 """
 import logging
 from os.path import dirname, join
-from xdg_soso import XDGSetup, is_xdg
+from xdg_soso import XDGSetup
 
-def install():
-	if is_xdg():
-		xdg = XDGSetup('kitbash', 'Kitbash')
-		xdg.comment = "Bash together new .SFZ drumkits from pieces of existing ones."
-		xdg.application_icon = join(dirname(__file__), 'res', 'kitbash-icon.svg')
-		xdg.categories = ['AudioVideo', 'Audio']
-		xdg.keywords = ['Audio', 'Sound', 'midi', 'SFZ', 'Drumkit']
-		xdg.install()
+class KitbashSetup(XDGSetup):
+
+	def __init__(self):
+		super().__init__('kitbash', 'Kitbash')
+		self._comment = "Bash together new .SFZ drumkits from pieces of existing ones."
+		self._vendor_name = 'zen_soso'
+		self._application_icon = join(dirname(__file__), 'res', 'kitbash-icon.svg')
+		self._categories = ['AudioVideo', 'Audio']
+		self._keywords = ['Audio', 'Sound', 'midi', 'SFZ', 'Drumkit']
 
 if __name__ == '__main__':
-	log_format = "[%(filename)24s:%(lineno)4d] %(levelname)-8s %(message)s"
-	logging.basicConfig(level = logging.DEBUG, format = log_format)
-	install()
+	logging.basicConfig(level = logging.DEBUG,
+		format = "[%(filename)24s:%(lineno)4d] %(levelname)-8s %(message)s")
+	installer = KitbashSetup()
+	installer.install()
 
 
 #  end kitbash/kitbash/install.py

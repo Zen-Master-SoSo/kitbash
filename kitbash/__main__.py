@@ -21,19 +21,36 @@
 kitbash is a program you can use to combine parts of various SFZ files into a
 new SFZ with instruments "borrowed" from the originals.
 """
-import sys, os, argparse, logging
-from PyQt5.QtWidgets import QApplication, QErrorMessage
+import sys, logging
+from os import environ, getlogin
+from argparse import ArgumentParser
+from PyQt5.QtWidgets import QApplication
 from qt_extras import exceptions_hook
+from xdg_soso import is_xdg
+from kitbash.install import KitbashSetup
 from kitbash.gui.main_window import MainWindow
 
 
 def main():
-	p = argparse.ArgumentParser()
-	p.epilog = __doc__
-	p.add_argument('Filename', type=str, nargs='?', help='SFZ file[s] to include at startup')
-	p.add_argument("--log-file", "-l", type=str, help="Log to this file")
-	p.add_argument("--verbose", "-v", action="store_true", help="Show more detailed debug information")
-	options = p.parse_args()
+	parser = ArgumentParser()
+	parser.epilog = __doc__
+	parser.add_argument('Filename', type=str, nargs='?',
+		help='SFZ file[s] to include at startup')
+	parser.add_argument("--log-file", "-l", type=str,
+		help="Log to this file")
+	if is_xdg():
+		parser.add_argument('--install', '-i', action = 'store_true',
+			help = """Install this application into your desktop
+environment. This will create a desktop launcher so you can start KitBash from
+your menu or Dash, and associate KitBash with SFZ files.""")
+		parser.add_argument('--uninstall', '-u', action = 'store_true',
+			help = """Remove KitBash from your desktop environment.
+The program will still be on your computer, and can be called from the command
+line as "kitbash", but you won't be able to see it in your desktop applications
+menu.""")
+	parser.add_argument("--verbose", "-v", action="store_true",
+		help="Show more detailed debug information")
+	options = parser.parse_args()
 
 	log_level = logging.DEBUG if options.verbose else logging.ERROR
 	log_format = "[%(filename)24s:%(lineno)4d] %(levelname)-8s %(message)s"
@@ -50,11 +67,21 @@ def main():
 			format = log_format
 		)
 
+	if is_xdg() and (options.install or options.uninstall):
+		installer = KitbashSetup()
+		if options.install:
+			installer.install()
+			print(f'Successfully installed KitBash for {getlogin()} on this machine.')
+		else:
+			installer.uninstall()
+			print(f'Successfully uninstalled KitBash for {getlogin()} on this machine.')
+		return 0
+
 	#-----------------------------------------------------------------------
 	# Annoyance fix per:
 	# https://stackoverflow.com/questions/986964/qt-session-management-error
 	try:
-		del os.environ['SESSION_MANAGER']
+		del environ['SESSION_MANAGER']
 	except KeyError:
 		pass
 	#-----------------------------------------------------------------------
