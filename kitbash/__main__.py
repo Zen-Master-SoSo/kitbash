@@ -27,7 +27,7 @@ from argparse import ArgumentParser
 from PyQt5.QtWidgets import QApplication
 from qt_extras import exceptions_hook
 from xdg_soso import is_xdg
-from kitbash.install import KitbashSetup
+from kitbash import KitbashSetup
 from kitbash.gui.main_window import MainWindow
 
 
@@ -67,30 +67,26 @@ menu.""")
 			format = log_format
 		)
 
-	if is_xdg() and (options.install or options.uninstall):
-		installer = KitbashSetup()
-		if options.install:
-			installer.install()
-			print(f'Successfully installed KitBash for {getlogin()} on this machine.')
-		else:
-			installer.uninstall()
-			print(f'Successfully uninstalled KitBash for {getlogin()} on this machine.')
-		return 0
-
-	#-----------------------------------------------------------------------
-	# Annoyance fix per:
-	# https://stackoverflow.com/questions/986964/qt-session-management-error
-	try:
-		del environ['SESSION_MANAGER']
-	except KeyError:
-		pass
-	#-----------------------------------------------------------------------
-
-	app = QApplication([])
-	sys.excepthook = exceptions_hook
-	main_window = MainWindow(options)
-	main_window.show()
-	sys.exit(app.exec())
+	if options.install:
+		KitbashSetup().install()
+		print(f'Successfully installed KitBash for {getlogin()} on this machine.')
+	elif options.uninstall:
+		KitbashSetup().uninstall()
+		print(f'Successfully uninstalled KitBash for {getlogin()} on this machine.')
+	else:
+		#-----------------------------------------------------------------------
+		# Annoyance fix per:
+		# https://stackoverflow.com/questions/986964/qt-session-management-error
+		try:
+			del environ['SESSION_MANAGER']
+		except KeyError:
+			pass
+		#-----------------------------------------------------------------------
+		app = QApplication([])
+		sys.excepthook = exceptions_hook
+		main_window = MainWindow(options)
+		main_window.show()
+		sys.exit(app.exec())
 
 if __name__ == "__main__":
 	sys.exit(main())

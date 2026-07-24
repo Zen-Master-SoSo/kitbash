@@ -28,6 +28,7 @@ from functools import lru_cache
 from PyQt5.QtCore import QSettings
 from PyQt5.QtWidgets import QApplication, QSplitter
 from qt_extras import DevilBox
+from xdg_soso import XDGSetup
 
 __version__ = "1.10.0"
 
@@ -130,6 +131,17 @@ class GeometrySaver:
 
 	def __splitter_geometry_key(self, splitter):
 		return f'{self.__class__.__name__}/{splitter.objectName()}/geometry'
+
+
+class KitbashSetup(XDGSetup):
+
+	def __init__(self):
+		super().__init__('kitbash', 'Kitbash')
+		self._comment = "Bash together new .SFZ drumkits from pieces of existing ones."
+		self._vendor_name = 'zen_soso'
+		self._application_icon = join(dirname(__file__), 'res', 'kitbash-icon.svg')
+		self._categories = ['AudioVideo', 'Audio']
+		self._keywords = ['Audio', 'Sound', 'midi', 'SFZ', 'Drumkit']
 
 
 #  end kitbash/kitbash/__init__.py
