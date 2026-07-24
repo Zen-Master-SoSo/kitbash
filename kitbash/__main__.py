@@ -22,7 +22,7 @@ kitbash is a program you can use to combine parts of various SFZ files into a
 new SFZ with instruments "borrowed" from the originals.
 """
 import sys, logging
-from os import environ, getlogin
+from os import environ
 from argparse import ArgumentParser
 from PyQt5.QtWidgets import QApplication
 from qt_extras import exceptions_hook
@@ -69,10 +69,8 @@ menu.""")
 
 	if options.install:
 		KitbashSetup().install()
-		print(f'Successfully installed KitBash for {getlogin()} on this machine.')
 	elif options.uninstall:
 		KitbashSetup().uninstall()
-		print(f'Successfully uninstalled KitBash for {getlogin()} on this machine.')
 	else:
 		#-----------------------------------------------------------------------
 		# Annoyance fix per:

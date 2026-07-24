@@ -12,7 +12,7 @@ dependencies = [
 	"recent_items_list >= 1.1.2",
 	"sfzen >= 2.3.2",
 	"soso_qt_extras >= 1.7.0",
-	"xdg_soso >= 1.0.2"
+	"xdg_soso >= 1.1.0"
 ]
 
 [project.urls]
